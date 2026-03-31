@@ -1,3 +1,20 @@
 <resources>
     <string name="app_name">LongTV</string>
+<!--    <string name="app_source">https://d.kstore.dev/download/7213/吃猫的鱼</string>-->
+    <string name="app_source">http://www.饭太硬.net/tv</string>
+
+    <string-array name="doh_name">
+        <item>System</item>
+        <item>Tencent</item>
+        <item>Alibaba</item>
+        <item>360</item>
+    </string-array>
+
+    <string-array name="doh_url">
+        <item />
+        <item>https://doh.pub/dns-query</item>
+        <item>https://dns.alidns.com/dns-query</item>
+        <item>https://doh.360.cn/dns-query</item>
+    </string-array>
+
 </resources>
