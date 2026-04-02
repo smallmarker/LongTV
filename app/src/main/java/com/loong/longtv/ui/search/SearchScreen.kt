@@ -1,11 +1,11 @@
 package com.loong.longtv.ui.search
 
-import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -22,6 +22,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
@@ -30,9 +31,16 @@ import androidx.tv.material3.ExperimentalTvMaterial3Api
 import androidx.tv.material3.Text
 import com.loong.longtv.Screen
 import com.loong.longtv.data.bean.TagGroup
-import com.loong.longtv.ui.common.isCompactScreen
-import com.loong.longtv.ui.theme.Purple40
+import com.loong.longtv.ui.common.DeviceClass
+import com.loong.longtv.ui.common.currentDeviceClass
+import com.loong.longtv.ui.theme.AppTextPrimary
+import com.loong.longtv.ui.theme.AppTextSecondary
+import com.loong.longtv.ui.theme.AppTextMuted
 import com.loong.longtv.ui.widgets.TvSurface
+import com.loong.longtv.ui.widgets.AppHero
+import com.loong.longtv.ui.widgets.AppPageHeader
+import com.loong.longtv.ui.widgets.AppScreen
+import com.loong.longtv.ui.widgets.SectionHeader
 
 /**
  * @author zl
@@ -41,67 +49,91 @@ import com.loong.longtv.ui.widgets.TvSurface
 @OptIn(ExperimentalTvMaterial3Api::class)
 @Composable
 fun SearchScreen(navController: NavController, viewModel: SearchViewModel = hiltViewModel()) {
-    val compact = isCompactScreen()
-    if (compact) {
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .verticalScroll(rememberScrollState())
-                .padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(20.dp)
-        ) {
-            SearchKeyboard(
-                modifier = Modifier.fillMaxWidth(),
-                onSearch = { keyword ->
-                    if (keyword.isNotBlank()) {
-                        navController.navigate(Screen.SearchResult.createRoute(keyword))
-                    }
-                },
-                onInputChange = {}
+    val deviceClass = currentDeviceClass()
+    val compact = deviceClass != DeviceClass.TV
+    val phoneLayout = deviceClass == DeviceClass.PHONE
+    AppScreen {
+        if (phoneLayout) {
+            AppPageHeader(
+                title = "搜索",
+                subtitle = "手机端以直接输入和最近搜索为主，减少 TV 风格键盘干扰。"
             )
-
-            SearchHistoryScreen(
-                modifier = Modifier.fillMaxWidth(),
-                viewModel = viewModel,
-                onHistoryClick = { keyword ->
-                    navController.navigate(Screen.SearchResult.createRoute(keyword))
-                }
+        } else {
+            AppHero(
+                title = "搜索与发现",
+                subtitle = "输入片名、浏览搜索历史，或者从已启用站点里快速进入结果页。"
             )
-
-            TagListScreen(
-                modifier = Modifier.fillMaxWidth(),
-                viewModel = viewModel,
-                compact = true
-            ) {
-                navController.navigate(Screen.SearchResult.createRoute(it))
-            }
         }
-    } else {
-        Row(horizontalArrangement = Arrangement.spacedBy(24.dp)) {
-            SearchHistoryScreen(
-                modifier = Modifier.width(200.dp),
-                viewModel = viewModel,
-                onHistoryClick = { keyword ->
-                    navController.navigate(Screen.SearchResult.createRoute(keyword))
-                }
-            )
+        if (compact) {
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .verticalScroll(rememberScrollState())
+                    .padding(top = 20.dp),
+                verticalArrangement = Arrangement.spacedBy(20.dp)
+            ) {
+                SearchKeyboard(
+                    modifier = Modifier.fillMaxWidth(),
+                    onSearch = { keyword ->
+                        if (keyword.isNotBlank()) {
+                            navController.navigate(Screen.SearchResult.createRoute(keyword))
+                        }
+                    },
+                    onInputChange = {}
+                )
 
-            SearchKeyboard(
-                modifier = Modifier.width(200.dp),
-                onSearch = { keyword ->
-                    if (keyword.isNotBlank()) {
+                SearchHistoryScreen(
+                    modifier = Modifier.fillMaxWidth(),
+                    viewModel = viewModel,
+                    onHistoryClick = { keyword ->
                         navController.navigate(Screen.SearchResult.createRoute(keyword))
                     }
-                },
-                onInputChange = {}
-            )
+                )
 
-            TagListScreen(
-                modifier = Modifier.weight(1f),
-                viewModel = viewModel,
-                compact = false
+                TagListScreen(
+                    modifier = Modifier.fillMaxWidth(),
+                    viewModel = viewModel,
+                    compact = true,
+                    phoneLayout = phoneLayout
+                ) {
+                    navController.navigate(Screen.SearchResult.createRoute(it))
+                }
+            }
+        } else {
+            Row(
+                modifier = Modifier.padding(top = 20.dp),
+                horizontalArrangement = Arrangement.spacedBy(24.dp)
             ) {
-                navController.navigate(Screen.SearchResult.createRoute(it))
+                Column(
+                    modifier = Modifier.width(260.dp),
+                    verticalArrangement = Arrangement.spacedBy(18.dp)
+                ) {
+                    SearchKeyboard(
+                        modifier = Modifier.fillMaxWidth(),
+                        onSearch = { keyword ->
+                            if (keyword.isNotBlank()) {
+                                navController.navigate(Screen.SearchResult.createRoute(keyword))
+                            }
+                        },
+                        onInputChange = {}
+                    )
+                    SearchHistoryScreen(
+                        modifier = Modifier.fillMaxWidth(),
+                        viewModel = viewModel,
+                        onHistoryClick = { keyword ->
+                            navController.navigate(Screen.SearchResult.createRoute(keyword))
+                        }
+                    )
+                }
+
+                TagListScreen(
+                    modifier = Modifier.weight(1f),
+                    viewModel = viewModel,
+                    compact = false,
+                    phoneLayout = false
+                ) {
+                    navController.navigate(Screen.SearchResult.createRoute(it))
+                }
             }
         }
     }
@@ -118,13 +150,9 @@ fun SearchHistoryScreen(
     val historyList = viewModel.history.collectAsState().value
 
     Column(modifier = modifier) {
-
-        Text(
-            modifier = Modifier
-                .background(Purple40, RoundedCornerShape(4.dp))
-                .padding(4.dp),
-            text = "搜索历史",
-            fontSize = 16.sp
+        SectionHeader(
+            title = "搜索历史",
+            subtitle = "继续上次的关键词"
         )
 
         Spacer(modifier = Modifier.height(8.dp))
@@ -144,7 +172,8 @@ fun SearchHistoryScreen(
                         contentAlignment = Alignment.Center,
                     ) {
                         Text(
-                            text = history.keyword
+                            text = history.keyword,
+                            color = AppTextPrimary
                         )
                     }
                 }
@@ -158,6 +187,7 @@ fun TagListScreen(
     modifier: Modifier = Modifier,
     viewModel: SearchViewModel,
     compact: Boolean = false,
+    phoneLayout: Boolean = false,
     onItemClick: (String) -> Unit
 ) {
     val groups = viewModel.searchState.collectAsState().value
@@ -168,7 +198,7 @@ fun TagListScreen(
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
             groups.forEach { group ->
-                TagItem(group) { wd ->
+                TagItem(group, phoneLayout = phoneLayout) { wd ->
                     onItemClick(wd)
                 }
             }
@@ -176,10 +206,11 @@ fun TagListScreen(
     } else {
         LazyColumn(
             modifier = modifier,
+            contentPadding = PaddingValues(bottom = 24.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
             items(groups) { group ->
-                TagItem(group) { wd ->
+                TagItem(group, phoneLayout = phoneLayout) { wd ->
                     onItemClick(wd)
                 }
             }
@@ -189,14 +220,11 @@ fun TagListScreen(
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
-fun TagItem(group: TagGroup, onClick: (String) -> Unit) {
+fun TagItem(group: TagGroup, phoneLayout: Boolean = false, onClick: (String) -> Unit) {
     Column {
-        Text(
-            modifier = Modifier
-                .background(Purple40, RoundedCornerShape(4.dp))
-                .padding(4.dp),
-            text = group.title,
-            fontSize = 16.sp
+        SectionHeader(
+            title = group.title,
+            subtitle = if (phoneLayout) "轻触即可发起搜索" else "发现更多相关入口"
         )
 
         Spacer(modifier = Modifier.height(8.dp))
@@ -214,7 +242,8 @@ fun TagItem(group: TagGroup, onClick: (String) -> Unit) {
                         contentAlignment = Alignment.Center,
                     ) {
                         Text(
-                            text = tag
+                            text = tag,
+                            color = AppTextSecondary
                         )
                     }
                 }

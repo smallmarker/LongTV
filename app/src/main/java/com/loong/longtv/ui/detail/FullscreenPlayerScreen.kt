@@ -4,37 +4,53 @@ import android.app.Activity
 import android.content.Context
 import android.content.ContextWrapper
 import android.content.pm.ActivityInfo
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
-import androidx.compose.runtime.getValue
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
-import androidx.compose.runtime.DisposableEffect
-import androidx.compose.runtime.Composable
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
-import androidx.activity.compose.BackHandler
 import androidx.navigation.NavController
 import androidx.tv.material3.Text
+import com.loong.longtv.ui.common.DeviceClass
+import com.loong.longtv.ui.common.currentDeviceClass
+import com.loong.longtv.ui.theme.AppCardOverlay
+import com.loong.longtv.ui.theme.AppError
+import com.loong.longtv.ui.theme.AppTextMuted
+import com.loong.longtv.ui.theme.AppTextPrimary
+import com.loong.longtv.ui.theme.BrandPrimary
 import com.loong.longtv.ui.widgets.AppButton
 import kotlinx.coroutines.delay
 
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun FullscreenPlayerScreen(
     navController: NavController,
@@ -47,9 +63,13 @@ fun FullscreenPlayerScreen(
 ) {
     val context = LocalContext.current
     val activity = context.findActivity()
+    val deviceClass = currentDeviceClass()
+    val compactLayout = deviceClass != DeviceClass.TV
+    val phoneLayout = deviceClass == DeviceClass.PHONE
     var currentPositionMs by remember(initialPositionMs) { mutableLongStateOf(initialPositionMs) }
     var overlayVisible by remember(title, videoUrl) { mutableStateOf(true) }
     var playbackError by remember(title, videoUrl) { mutableStateOf<String?>(null) }
+    val episodeLabel = if (episodeCount > 0) "第 ${episodeIndex + 1} / $episodeCount 集" else "单集播放"
 
     fun exitFullscreen() {
         navController.previousBackStackEntry
@@ -71,9 +91,7 @@ fun FullscreenPlayerScreen(
         navController.popBackStack()
     }
 
-    BackHandler {
-        exitFullscreen()
-    }
+    BackHandler(onBack = ::exitFullscreen)
 
     DisposableEffect(activity) {
         if (activity == null) onDispose { }
@@ -117,9 +135,7 @@ fun FullscreenPlayerScreen(
                 currentPositionMs = position
             },
             onControllerVisibilityChanged = { visible ->
-                if (visible) {
-                    overlayVisible = true
-                }
+                if (visible) overlayVisible = true
             },
             onPlaybackError = { message ->
                 playbackError = message
@@ -128,46 +144,94 @@ fun FullscreenPlayerScreen(
         )
 
         if (overlayVisible) {
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .background(Color(0x66000000))
-                    .padding(horizontal = 16.dp, vertical = 12.dp)
-                    .align(Alignment.TopStart),
-                horizontalArrangement = Arrangement.spacedBy(12.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                AppButton(text = "返回", onClick = ::exitFullscreen)
-                if (episodeCount > 1) {
-                    AppButton(
-                        text = "上一集",
-                        onClick = { switchEpisode(episodeIndex - 1) },
-                        enabled = episodeIndex > 0
-                    )
-                    AppButton(
-                        text = "下一集",
-                        onClick = { switchEpisode(episodeIndex + 1) },
-                        enabled = episodeIndex < episodeCount - 1
-                    )
-                }
-            }
-
             Column(
                 modifier = Modifier
+                    .fillMaxWidth()
+                    .background(
+                        Brush.verticalGradient(
+                            colors = listOf(
+                                Color(0xD907101C),
+                                Color(0x9807101C),
+                                Color.Transparent
+                            )
+                        )
+                    )
+                    .padding(
+                        horizontal = if (compactLayout) 14.dp else 20.dp,
+                        vertical = if (compactLayout) 12.dp else 18.dp
+                    )
                     .align(Alignment.TopStart)
-                    .padding(start = 112.dp, top = 16.dp, end = 16.dp)
             ) {
-                Text(
-                    text = title.ifBlank { "全屏播放" },
-                    color = Color.White,
-                    fontSize = 16.sp
-                )
-                Text(
-                    text = "上滑可临时显示系统栏，点播放器可显示控制器",
-                    color = Color.LightGray,
-                    fontSize = 12.sp,
-                    modifier = Modifier.padding(top = 4.dp)
-                )
+                FlowRow(
+                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    AppButton(text = "返回", onClick = ::exitFullscreen)
+                    if (episodeCount > 1) {
+                        AppButton(
+                            text = "上一集",
+                            onClick = { switchEpisode(episodeIndex - 1) },
+                            enabled = episodeIndex > 0
+                        )
+                        AppButton(
+                            text = "下一集",
+                            onClick = { switchEpisode(episodeIndex + 1) },
+                            enabled = episodeIndex < episodeCount - 1
+                        )
+                    }
+                }
+
+                Row(
+                    modifier = Modifier.padding(top = if (compactLayout) 10.dp else 14.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.Bottom
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = title.ifBlank { "全屏播放" },
+                            color = AppTextPrimary,
+                            fontSize = if (compactLayout) 18.sp else 22.sp,
+                            fontWeight = FontWeight.Bold
+                        )
+                        Text(
+                            text = if (phoneLayout) {
+                                "点按播放器显示控制器"
+                            } else {
+                                "点按播放器唤出控制器，上滑可暂时显示系统栏"
+                            },
+                            color = AppTextMuted,
+                            fontSize = 12.sp,
+                            modifier = Modifier.padding(top = 6.dp)
+                        )
+                    }
+                    if (!phoneLayout) {
+                        Spacer(modifier = Modifier.padding(horizontal = 8.dp))
+                        Column(horizontalAlignment = Alignment.End) {
+                            Text(
+                                text = episodeLabel,
+                                color = AppTextPrimary,
+                                fontSize = 13.sp,
+                                fontWeight = FontWeight.SemiBold
+                            )
+                            Text(
+                                text = formatPlayerTime(currentPositionMs),
+                                color = BrandPrimary,
+                                fontSize = 12.sp,
+                                modifier = Modifier.padding(top = 4.dp)
+                            )
+                        }
+                    }
+                }
+                if (phoneLayout) {
+                    FlowRow(
+                        modifier = Modifier.padding(top = 10.dp),
+                        horizontalArrangement = Arrangement.spacedBy(10.dp),
+                        verticalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        InfoBadge(text = episodeLabel)
+                        InfoBadge(text = formatPlayerTime(currentPositionMs), highlight = true)
+                    }
+                }
             }
         }
 
@@ -175,17 +239,30 @@ fun FullscreenPlayerScreen(
             Column(
                 modifier = Modifier
                     .align(Alignment.Center)
-                    .background(Color(0xCC101010))
-                    .padding(20.dp),
+                    .clip(RoundedCornerShape(24.dp))
+                    .background(AppCardOverlay)
+                    .padding(
+                        horizontal = if (compactLayout) 18.dp else 24.dp,
+                        vertical = if (compactLayout) 18.dp else 22.dp
+                    ),
                 verticalArrangement = Arrangement.spacedBy(12.dp),
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
                 Text(
                     text = playbackError ?: "播放失败",
-                    color = Color.White,
-                    fontSize = 14.sp
+                    color = AppError,
+                    fontSize = 15.sp,
+                    fontWeight = FontWeight.SemiBold
                 )
-                Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                Text(
+                    text = "当前地址可能不是直链，或站点还需要进一步解析。",
+                    color = AppTextMuted,
+                    fontSize = 12.sp
+                )
+                FlowRow(
+                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
                     AppButton(
                         text = "重试",
                         onClick = {
@@ -205,6 +282,49 @@ fun FullscreenPlayerScreen(
                 }
             }
         }
+
+        Box(
+            modifier = Modifier
+                .align(Alignment.BottomStart)
+                .fillMaxWidth()
+                .fillMaxHeight(0.16f)
+                .background(
+                    Brush.verticalGradient(
+                        colors = listOf(
+                            Color.Transparent,
+                            Color(0xA507101C)
+                        )
+                    )
+                )
+        )
+    }
+}
+
+private fun formatPlayerTime(ms: Long): String {
+    val totalSeconds = (ms / 1000).coerceAtLeast(0)
+    val h = totalSeconds / 3600
+    val m = (totalSeconds % 3600) / 60
+    val s = totalSeconds % 60
+    return if (h > 0) "%d:%02d:%02d".format(h, m, s) else "%02d:%02d".format(m, s)
+}
+
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun InfoBadge(
+    text: String,
+    highlight: Boolean = false
+) {
+    Box(
+        modifier = Modifier
+            .clip(RoundedCornerShape(999.dp))
+            .background(if (highlight) BrandPrimary.copy(alpha = 0.2f) else Color.White.copy(alpha = 0.08f))
+            .padding(horizontal = 10.dp, vertical = 6.dp)
+    ) {
+        Text(
+            text = text,
+            color = if (highlight) BrandPrimary else AppTextPrimary,
+            fontSize = 11.sp
+        )
     }
 }
 

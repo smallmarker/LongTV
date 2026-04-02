@@ -1,10 +1,13 @@
 package com.loong.longtv.ui.favorite
 
-import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
@@ -25,37 +28,62 @@ import androidx.navigation.NavController
 import androidx.tv.material3.Text
 import com.loong.longtv.Screen
 import com.loong.longtv.data.room.entity.FavoriteEntity
-import com.loong.longtv.ui.common.isCompactScreen
+import com.loong.longtv.ui.common.DeviceClass
+import com.loong.longtv.ui.common.currentDeviceClass
+import com.loong.longtv.ui.theme.AppTextMuted
+import com.loong.longtv.ui.theme.AppTextPrimary
 import com.loong.longtv.ui.widgets.AppButton
+import com.loong.longtv.ui.widgets.AppHero
+import com.loong.longtv.ui.widgets.AppPageHeader
+import com.loong.longtv.ui.widgets.AppScreen
+import com.loong.longtv.ui.widgets.SectionHeader
 import com.loong.longtv.ui.widgets.SmartAsyncImage
 import com.loong.longtv.ui.widgets.TvSurface
 
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun FavoriteScreen(
     navController: NavController,
     viewModel: FavoriteViewModel = hiltViewModel()
 ) {
-    val compact = isCompactScreen()
+    val deviceClass = currentDeviceClass()
+    val compact = deviceClass != DeviceClass.TV
+    val phoneLayout = deviceClass == DeviceClass.PHONE
     val favorites by viewModel.favorites.collectAsStateWithLifecycle()
 
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(Color.Black)
-            .padding(24.dp)
-    ) {
-        Text(text = "收藏", color = Color.White, fontSize = 24.sp)
+    AppScreen {
+        if (phoneLayout) {
+            AppPageHeader(
+                title = "我的收藏",
+                subtitle = "手机端以紧凑片单卡片管理收藏内容。"
+            )
+        } else {
+            AppHero(
+                title = "我的收藏",
+                subtitle = "把常看的影片、剧集和片源收藏起来，形成自己的内容库。"
+            )
+        }
+        SectionHeader(
+            title = "收藏片单",
+            subtitle = if (favorites.isEmpty()) "还没有收藏内容" else "共 ${favorites.size} 个条目",
+            modifier = Modifier.padding(top = 20.dp)
+        )
 
         if (favorites.isEmpty()) {
             Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                Text(text = "暂无收藏", color = Color.Gray)
+                Text(text = "暂无收藏", color = AppTextMuted)
             }
         } else {
-            LazyColumn(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            LazyColumn(
+                modifier = Modifier.padding(top = 14.dp),
+                contentPadding = PaddingValues(bottom = 24.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
                 items(favorites) { item ->
                     FavoriteCard(
                         item = item,
                         compact = compact,
+                        phoneLayout = phoneLayout,
                         onClick = {
                             navController.navigate(Screen.VideoDetail.createRoute(item.siteKey, item.videoId))
                         },
@@ -71,11 +99,43 @@ fun FavoriteScreen(
 private fun FavoriteCard(
     item: FavoriteEntity,
     compact: Boolean,
+    phoneLayout: Boolean,
     onClick: () -> Unit,
     onRemove: () -> Unit
 ) {
     TvSurface(onClick = onClick) {
-        if (compact) {
+        if (phoneLayout) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(12.dp),
+                verticalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                    SmartAsyncImage(
+                        model = item.cover,
+                        contentDescription = item.title,
+                        modifier = Modifier
+                            .width(116.dp)
+                            .aspectRatio(2f / 3f),
+                        contentScale = androidx.compose.ui.layout.ContentScale.Crop,
+                        fallbackText = item.title.ifBlank { "收藏内容" }
+                    )
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(text = item.title, color = AppTextPrimary, fontSize = 16.sp, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                        Text(
+                            text = item.siteKey,
+                            color = AppTextMuted,
+                            fontSize = 12.sp,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                            modifier = Modifier.padding(top = 4.dp)
+                        )
+                    }
+                }
+                AppButton(text = "移除", onClick = onRemove)
+            }
+        } else if (compact) {
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -90,8 +150,8 @@ private fun FavoriteCard(
                     fallbackText = item.title.ifBlank { "收藏内容" }
                 )
                 Column {
-                    Text(text = item.title, color = Color.White, fontSize = 18.sp, maxLines = 2, overflow = TextOverflow.Ellipsis)
-                    Text(text = item.siteKey, color = Color.Gray, fontSize = 13.sp)
+                    Text(text = item.title, color = AppTextPrimary, fontSize = 18.sp, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                    Text(text = item.siteKey, color = AppTextMuted, fontSize = 13.sp)
                 }
                 AppButton(text = "移除", onClick = onRemove)
             }
@@ -111,8 +171,8 @@ private fun FavoriteCard(
                     fallbackText = item.title.ifBlank { "收藏内容" }
                 )
                 Column(modifier = Modifier.weight(1f)) {
-                    Text(text = item.title, color = Color.White, fontSize = 18.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                    Text(text = item.siteKey, color = Color.Gray, fontSize = 13.sp)
+                    Text(text = item.title, color = AppTextPrimary, fontSize = 18.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    Text(text = item.siteKey, color = AppTextMuted, fontSize = 13.sp)
                 }
                 AppButton(text = "移除", onClick = onRemove)
             }

@@ -15,15 +15,35 @@ fun LongTVTheme(
 ) {
     val colorScheme = if (isInDarkTheme) {
         darkColorScheme(
-            primary = Purple80,
-            secondary = PurpleGrey80,
-            tertiary = Pink80
+            primary = BrandPrimary,
+            secondary = BrandSecondary,
+            tertiary = BrandAccent,
+            background = AppBackground,
+            surface = AppSurface,
+            surfaceVariant = AppSurfaceVariant,
+            onPrimary = AppBackground,
+            onSecondary = AppTextPrimary,
+            onTertiary = AppTextPrimary,
+            onBackground = AppTextPrimary,
+            onSurface = AppTextPrimary,
+            onSurfaceVariant = AppTextSecondary,
+            error = AppError
         )
     } else {
         lightColorScheme(
-            primary = Purple40,
-            secondary = PurpleGrey40,
-            tertiary = Pink40
+            primary = BrandPrimaryDark,
+            secondary = BrandSecondary,
+            tertiary = BrandAccent,
+            background = AppBackground,
+            surface = AppSurface,
+            surfaceVariant = AppSurfaceVariant,
+            onPrimary = AppBackground,
+            onSecondary = AppTextPrimary,
+            onTertiary = AppTextPrimary,
+            onBackground = AppTextPrimary,
+            onSurface = AppTextPrimary,
+            onSurfaceVariant = AppTextSecondary,
+            error = AppError
         )
     }
     MaterialTheme(

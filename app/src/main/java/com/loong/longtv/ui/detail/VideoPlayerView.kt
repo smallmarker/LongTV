@@ -22,7 +22,9 @@ import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
 import androidx.media3.ui.AspectRatioFrameLayout
 import androidx.media3.ui.PlayerView
 import androidx.media3.ui.PlayerView.ControllerVisibilityListener
-import com.loong.longtv.ui.common.isCompactScreen
+import com.loong.longtv.ui.common.DeviceClass
+import com.loong.longtv.ui.common.currentDeviceClass
+import kotlin.math.abs
 import kotlinx.coroutines.delay
 
 @OptIn(UnstableApi::class)
@@ -40,7 +42,8 @@ fun VideoPlayerView(
     onPlaybackError: ((String) -> Unit)? = null,
 ) {
     val context = LocalContext.current
-    val compact = isCompactScreen()
+    val deviceClass = currentDeviceClass()
+    val showTouchController = deviceClass != DeviceClass.TV
     val player = remember(videoUrl, requestHeaders) {
         val httpFactory = DefaultHttpDataSource.Factory()
             .setAllowCrossProtocolRedirects(true)
@@ -55,7 +58,7 @@ fun VideoPlayerView(
             }
     }
 
-    LaunchedEffect(player, videoUrl, requestHeaders, initialPositionMs) {
+    LaunchedEffect(player, videoUrl, requestHeaders) {
         try {
             val item = MediaItem.fromUri(videoUrl.toUri())
             player.setMediaItem(item)
@@ -64,6 +67,13 @@ fun VideoPlayerView(
             player.playWhenReady = autoPlay
         } catch (error: Throwable) {
             Log.e("VideoPlayerView", "prepare player failed for url=$videoUrl", error)
+        }
+    }
+
+    LaunchedEffect(player, videoUrl, initialPositionMs) {
+        if (initialPositionMs <= 0 || player.currentMediaItem == null) return@LaunchedEffect
+        if (abs(player.currentPosition - initialPositionMs) > 1_500) {
+            player.seekTo(initialPositionMs)
         }
     }
 
@@ -106,8 +116,8 @@ fun VideoPlayerView(
         factory = {
             PlayerView(context).apply {
                 this.player = player
-                this.useController = showController || compact
-                this.controllerAutoShow = showController || compact
+                this.useController = showController || showTouchController
+                this.controllerAutoShow = showController || showTouchController
                 this.controllerHideOnTouch = true
                 this.resizeMode = AspectRatioFrameLayout.RESIZE_MODE_FIT
                 setControllerVisibilityListener(
@@ -119,8 +129,8 @@ fun VideoPlayerView(
         },
         update = { playerView ->
             playerView.player = player
-            playerView.useController = showController || compact
-            playerView.controllerAutoShow = showController || compact
+            playerView.useController = showController || showTouchController
+            playerView.controllerAutoShow = showController || showTouchController
             playerView.controllerHideOnTouch = true
             playerView.resizeMode = AspectRatioFrameLayout.RESIZE_MODE_FIT
             playerView.setControllerVisibilityListener(

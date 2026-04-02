@@ -13,8 +13,14 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.tv.material3.Button
+import androidx.tv.material3.ButtonDefaults
 import androidx.tv.material3.Text
-import com.loong.longtv.ui.common.isCompactScreen
+import com.loong.longtv.ui.common.DeviceClass
+import com.loong.longtv.ui.common.currentDeviceClass
+import com.loong.longtv.ui.theme.AppSurfaceVariant
+import com.loong.longtv.ui.theme.AppTextPrimary
+import com.loong.longtv.ui.theme.BrandPrimary
+import com.loong.longtv.ui.theme.BrandPrimaryDark
 
 @Composable
 fun AppButton(
@@ -23,29 +29,41 @@ fun AppButton(
     modifier: Modifier = Modifier,
     enabled: Boolean = true
 ) {
-    val compact = isCompactScreen()
-    if (compact) {
-        Box(
-            modifier = modifier
-                .clip(RoundedCornerShape(8.dp))
-                .background(if (enabled) Color(0xFF2A4D7A) else Color(0xFF3A3A3A))
-                .then(if (enabled) Modifier.clickable(onClick = onClick) else Modifier)
-                .padding(horizontal = 14.dp, vertical = 10.dp),
-            contentAlignment = Alignment.Center
-        ) {
-            Text(
-                text = text,
-                color = Color.White,
-                fontSize = 14.sp
-            )
+    when (currentDeviceClass()) {
+        DeviceClass.PHONE, DeviceClass.TABLET -> {
+            Box(
+                modifier = modifier
+                    .clip(RoundedCornerShape(14.dp))
+                    .background(if (enabled) BrandPrimary else AppSurfaceVariant)
+                    .then(if (enabled) Modifier.clickable(onClick = onClick) else Modifier)
+                    .padding(horizontal = 16.dp, vertical = 11.dp),
+                contentAlignment = Alignment.Center
+            ) {
+                Text(
+                    text = text,
+                    color = if (enabled) Color(0xFF0E1626) else AppTextPrimary.copy(alpha = 0.45f),
+                    fontSize = 14.sp
+                )
+            }
         }
-    } else {
-        Button(
-            onClick = onClick,
-            modifier = modifier,
-            enabled = enabled
-        ) {
-            Text(text)
+
+        DeviceClass.TV -> {
+            Button(
+                onClick = onClick,
+                modifier = modifier,
+                enabled = enabled,
+                shape = ButtonDefaults.shape(RoundedCornerShape(14.dp)),
+                colors = ButtonDefaults.colors(
+                    containerColor = BrandPrimary,
+                    contentColor = Color(0xFF0E1626),
+                    focusedContainerColor = BrandPrimaryDark,
+                    focusedContentColor = Color(0xFF0E1626),
+                    disabledContainerColor = AppSurfaceVariant,
+                    disabledContentColor = AppTextPrimary.copy(alpha = 0.45f)
+                )
+            ) {
+                Text(text)
+            }
         }
     }
 }

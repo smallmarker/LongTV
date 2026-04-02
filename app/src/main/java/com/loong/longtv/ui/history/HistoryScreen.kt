@@ -1,10 +1,13 @@
 package com.loong.longtv.ui.history
 
-import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
@@ -25,42 +28,68 @@ import androidx.navigation.NavController
 import androidx.tv.material3.Text
 import com.loong.longtv.Screen
 import com.loong.longtv.data.room.entity.WatchHistoryEntity
-import com.loong.longtv.ui.common.isCompactScreen
+import com.loong.longtv.ui.common.DeviceClass
+import com.loong.longtv.ui.common.currentDeviceClass
+import com.loong.longtv.ui.theme.AppTextMuted
+import com.loong.longtv.ui.theme.AppTextPrimary
+import com.loong.longtv.ui.theme.AppTextSecondary
 import com.loong.longtv.ui.widgets.AppButton
+import com.loong.longtv.ui.widgets.AppHero
+import com.loong.longtv.ui.widgets.AppPageHeader
+import com.loong.longtv.ui.widgets.AppScreen
+import com.loong.longtv.ui.widgets.SectionHeader
 import com.loong.longtv.ui.widgets.SmartAsyncImage
 import com.loong.longtv.ui.widgets.TvSurface
 
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun HistoryScreen(
     navController: NavController,
     viewModel: HistoryViewModel = hiltViewModel()
 ) {
-    val compact = isCompactScreen()
+    val deviceClass = currentDeviceClass()
+    val compact = deviceClass != DeviceClass.TV
+    val phoneLayout = deviceClass == DeviceClass.PHONE
     val histories by viewModel.histories.collectAsStateWithLifecycle()
 
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(Color.Black)
-            .padding(24.dp)
-    ) {
-        Row(
-            modifier = Modifier.fillMaxWidth(),
+    AppScreen {
+        if (phoneLayout) {
+            AppPageHeader(
+                title = "观看历史",
+                subtitle = "手机端聚焦继续观看和最近进度。"
+            )
+        } else {
+            AppHero(
+                title = "观看历史",
+                subtitle = "自动记录上次看到哪一集，方便从客厅电视或手机继续追剧。"
+            )
+        }
+        FlowRow(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(top = 20.dp),
             horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
+            verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
-            Text(text = "观看历史", color = Color.White, fontSize = 24.sp)
+            SectionHeader(
+                title = "继续观看",
+                subtitle = if (histories.isEmpty()) "还没有历史记录" else "共 ${histories.size} 条记录"
+            )
             AppButton(text = "清空", onClick = viewModel::clearAll)
         }
 
         if (histories.isEmpty()) {
             Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                Text(text = "暂无观看历史", color = Color.Gray)
+                Text(text = "暂无观看历史", color = AppTextMuted)
             }
         } else {
-            LazyColumn(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            LazyColumn(
+                modifier = Modifier.padding(top = 14.dp),
+                contentPadding = PaddingValues(bottom = 24.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
                 items(histories) { item ->
-                    HistoryCard(item = item, compact = compact) {
+                    HistoryCard(item = item, compact = compact, phoneLayout = phoneLayout) {
                         navController.navigate(Screen.VideoDetail.createRoute(item.siteKey, item.videoId))
                     }
                 }
@@ -73,10 +102,46 @@ fun HistoryScreen(
 private fun HistoryCard(
     item: WatchHistoryEntity,
     compact: Boolean,
+    phoneLayout: Boolean,
     onClick: () -> Unit
 ) {
     TvSurface(onClick = onClick) {
-        if (compact) {
+        if (phoneLayout) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(12.dp),
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                SmartAsyncImage(
+                    model = item.cover,
+                    contentDescription = item.title,
+                    modifier = Modifier
+                        .width(116.dp)
+                        .aspectRatio(2f / 3f),
+                    contentScale = androidx.compose.ui.layout.ContentScale.Crop,
+                    fallbackText = item.title.ifBlank { "历史记录" }
+                )
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(text = item.title, color = AppTextPrimary, fontSize = 16.sp, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                    Text(
+                        text = "${item.sourceName} / ${item.episodeName}",
+                        color = AppTextSecondary,
+                        fontSize = 13.sp,
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.padding(top = 4.dp)
+                    )
+                    Text(
+                        text = "进度 ${formatMs(item.positionMs)}",
+                        color = AppTextMuted,
+                        fontSize = 12.sp,
+                        modifier = Modifier.padding(top = 6.dp)
+                    )
+                }
+            }
+        } else if (compact) {
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -91,17 +156,17 @@ private fun HistoryCard(
                     fallbackText = item.title.ifBlank { "历史记录" }
                 )
                 Column {
-                    Text(text = item.title, color = Color.White, fontSize = 18.sp, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                    Text(text = item.title, color = AppTextPrimary, fontSize = 18.sp, maxLines = 2, overflow = TextOverflow.Ellipsis)
                     Text(
                         text = "${item.sourceName} / ${item.episodeName}",
-                        color = Color.LightGray,
+                        color = AppTextSecondary,
                         fontSize = 14.sp,
                         maxLines = 2,
                         overflow = TextOverflow.Ellipsis
                     )
                     Text(
                         text = "进度 ${formatMs(item.positionMs)}",
-                        color = Color.Gray,
+                        color = AppTextMuted,
                         fontSize = 12.sp
                     )
                 }
@@ -124,17 +189,17 @@ private fun HistoryCard(
                     fallbackText = item.title.ifBlank { "历史记录" }
                 )
                 Column(modifier = Modifier.weight(1f)) {
-                    Text(text = item.title, color = Color.White, fontSize = 18.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    Text(text = item.title, color = AppTextPrimary, fontSize = 18.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
                     Text(
                         text = "${item.sourceName} / ${item.episodeName}",
-                        color = Color.LightGray,
+                        color = AppTextSecondary,
                         fontSize = 14.sp,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis
                     )
                     Text(
                         text = "进度 ${formatMs(item.positionMs)}",
-                        color = Color.Gray,
+                        color = AppTextMuted,
                         fontSize = 12.sp
                     )
                 }

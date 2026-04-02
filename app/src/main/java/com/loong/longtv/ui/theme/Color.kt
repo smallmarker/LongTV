@@ -2,16 +2,24 @@ package com.loong.longtv.ui.theme
 
 import androidx.compose.ui.graphics.Color
 
-val Purple80 = Color(0xFFD0BCFF)
-val PurpleGrey80 = Color(0xFFCCC2DC)
-val Pink80 = Color(0xFFEFB8C8)
+val BrandPrimary = Color(0xFFFFB84D)
+val BrandPrimaryDark = Color(0xFFE29A2D)
+val BrandSecondary = Color(0xFF4DB6FF)
+val BrandAccent = Color(0xFFFF6E5B)
 
-val Purple40 = Color(0xFF6650a4)
-val PurpleGrey40 = Color(0xFF625b71)
-val Pink40 = Color(0xFF7D5260)
+val AppBackground = Color(0xFF08111F)
+val AppBackgroundElevated = Color(0xFF111D31)
+val AppSurface = Color(0xFF14233A)
+val AppSurfaceVariant = Color(0xFF1A2D4A)
+val AppCardOverlay = Color(0xCC07101C)
 
-// === 键盘专用色 ===
-val KeyboardDefault = Color(0x1AFFFFFF)    // 默认键
-val KeyboardFocused = Color(0xFF2979FF)    // 聚焦高亮
-val KeyboardPressed = Color(0xFF1565C0)    // 按下时
-val KeyboardDisabled = Color(0x33FFFFFF)   // 禁用态
+val AppTextPrimary = Color(0xFFF7F9FC)
+val AppTextSecondary = Color(0xFFB4C0D3)
+val AppTextMuted = Color(0xFF7E8CA5)
+val AppSuccess = Color(0xFF65D38A)
+val AppError = Color(0xFFFF7C7C)
+
+val KeyboardDefault = Color(0x33243A5A)
+val KeyboardFocused = Color(0xFF355E93)
+val KeyboardPressed = Color(0xFF27466D)
+val KeyboardDisabled = Color(0x1FFFFFFF)

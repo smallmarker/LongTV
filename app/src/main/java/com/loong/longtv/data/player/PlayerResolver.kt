@@ -46,16 +46,6 @@ class PlayerResolver @Inject constructor(
             )
         }
 
-        if (content.parse == 0) {
-            return@withContext PlayableMedia(
-                url = sourceUrl,
-                headers = content.header,
-                requiresParse = false,
-                resolutionType = PlaybackResolutionType.SPIDER,
-                resolutionNote = "Spider 已返回可直接播放地址"
-            )
-        }
-
         val parsedUrl = localParserRegistry.resolve(
             ParseRequest(
                 sourceUrl = sourceUrl,
@@ -69,6 +59,16 @@ class PlayerResolver @Inject constructor(
                 requiresParse = false,
                 resolutionType = PlaybackResolutionType.LOCAL_PARSER,
                 resolutionNote = "本地解析器已命中播放地址"
+            )
+        }
+
+        if (content.parse == 0) {
+            return@withContext PlayableMedia(
+                url = sourceUrl,
+                headers = content.header,
+                requiresParse = false,
+                resolutionType = PlaybackResolutionType.SPIDER,
+                resolutionNote = "Spider 已返回可直接播放地址"
             )
         }
 

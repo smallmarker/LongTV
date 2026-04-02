@@ -13,7 +13,6 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.Dp
@@ -21,7 +20,9 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.tv.material3.ExperimentalTvMaterial3Api
 import androidx.tv.material3.Text
-import com.loong.longtv.ui.common.isCompactScreen
+import com.loong.longtv.ui.common.DeviceClass
+import com.loong.longtv.ui.common.currentDeviceClass
+import com.loong.longtv.ui.theme.AppTextPrimary
 import com.loong.longtv.ui.widgets.TvSurface
 
 /**
@@ -35,7 +36,7 @@ fun Keyboard(
     modifier: Modifier = Modifier,
     onKeyClick: (String) -> Unit
 ) {
-    val compact = isCompactScreen()
+    val deviceClass = currentDeviceClass()
     val keys = listOf(
         "A", "B", "C", "D", "E", "F",
         "G", "H", "I", "J", "K", "L",
@@ -75,7 +76,7 @@ fun Keyboard(
                         KeyboardKey(
                             label = label,
                             width = width,
-                            compact = compact,
+                            deviceClass = deviceClass,
                             onClick = { onKeyClick(label) }
                         )
                     }
@@ -90,7 +91,7 @@ fun Keyboard(
 fun KeyboardKey(
     label: String,
     width: Dp,
-    compact: Boolean,
+    deviceClass: DeviceClass,
     onClick: () -> Unit
 ) {
     TvSurface(
@@ -105,9 +106,13 @@ fun KeyboardKey(
         ) {
             Text(
                 text = label,
-                fontSize = if (compact) 15.sp else 12.sp,
+                fontSize = when (deviceClass) {
+                    DeviceClass.PHONE -> 15.sp
+                    DeviceClass.TABLET -> 14.sp
+                    DeviceClass.TV -> 12.sp
+                },
                 fontWeight = FontWeight.Medium,
-                color = Color.White,
+                color = AppTextPrimary,
                 textAlign = TextAlign.Center
             )
         }

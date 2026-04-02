@@ -5,6 +5,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -32,8 +33,17 @@ import androidx.navigation.NavController
 import androidx.tv.material3.Text
 import com.loong.longtv.Screen.VideoDetail
 import com.loong.longtv.ui.home.VideoCard
-import com.loong.longtv.ui.common.isCompactScreen
+import com.loong.longtv.ui.common.DeviceClass
+import com.loong.longtv.ui.common.currentDeviceClass
+import com.loong.longtv.ui.theme.AppTextMuted
+import com.loong.longtv.ui.theme.AppTextPrimary
+import com.loong.longtv.ui.theme.AppTextSecondary
+import com.loong.longtv.ui.widgets.AdaptiveChipTabs
 import com.loong.longtv.ui.widgets.AppButton
+import com.loong.longtv.ui.widgets.AppHero
+import com.loong.longtv.ui.widgets.AppPageHeader
+import com.loong.longtv.ui.widgets.AppScreen
+import com.loong.longtv.ui.widgets.SectionHeader
 import com.loong.longtv.ui.widgets.TvSurface
 
 /**
@@ -47,7 +57,9 @@ fun SearchResultScreen(
     keyword: String,
     viewModel: SearchViewModel = hiltViewModel()
 ) {
-    val compact = isCompactScreen()
+    val deviceClass = currentDeviceClass()
+    val compact = deviceClass != DeviceClass.TV
+    val phoneLayout = deviceClass == DeviceClass.PHONE
     LaunchedEffect(keyword) {
         viewModel.searchContent(keyword)
     }
@@ -63,68 +75,72 @@ fun SearchResultScreen(
         }
     }
 
-    Column {
+    AppScreen {
+        if (phoneLayout) {
+            AppPageHeader(
+                title = keyword,
+                subtitle = "手机端结果页使用顶部筛选和双列海报流。"
+            )
+        } else {
+            AppHero(
+                title = "搜索结果",
+                subtitle = "关键词 “$keyword” 的聚合结果会按站点分组展示，方便快速切换片源。"
+            )
+        }
+
         SearchHeader(
             keyword = keyword,
             selectedCategory = selectedCategory,
-            resultCount = videoMap[selectedCategory].orEmpty().size
+            resultCount = videoMap[selectedCategory].orEmpty().size,
+            phoneLayout = phoneLayout
         )
 
-        when {
-            loading -> {
-                SearchCenterMessage("正在搜索 $keyword ...", Color.White)
-                return@Column
-            }
-
-            error != null && videoMap.isEmpty() -> {
-                SearchCenterMessage(
-                    message = error ?: "搜索失败",
-                    color = Color.Red,
-                    actionLabel = "重试",
-                    onAction = { viewModel.searchContent(keyword) }
-                )
-                return@Column
-            }
-
-            videoMap.isEmpty() -> {
-                SearchCenterMessage(
-                    message = "暂无搜索结果",
-                    color = Color.Gray,
-                    actionLabel = "重试",
-                    onAction = { viewModel.searchContent(keyword) }
-                )
-                return@Column
-            }
-        }
-
-        if (compact) {
-            CompactCategoryRow(
-                categories = categories,
-                selectedCategory = selectedCategory,
-                onSelect = { selectedCategory = it }
+        if (loading) {
+            SearchCenterMessage("正在搜索 $keyword ...", Color.White)
+        } else if (error != null && videoMap.isEmpty()) {
+            SearchCenterMessage(
+                message = error ?: "搜索失败",
+                color = Color.Red,
+                actionLabel = "重试",
+                onAction = { viewModel.searchContent(keyword) }
+            )
+        } else if (videoMap.isEmpty()) {
+            SearchCenterMessage(
+                message = "暂无搜索结果",
+                color = Color.Gray,
+                actionLabel = "重试",
+                onAction = { viewModel.searchContent(keyword) }
+            )
+        } else if (compact) {
+            AdaptiveChipTabs(
+                items = categories,
+                selectedIndex = categories.indexOf(selectedCategory).coerceAtLeast(0),
+                onSelect = { index -> selectedCategory = categories.getOrNull(index) },
+                modifier = Modifier.padding(bottom = 16.dp)
             )
             SearchResultGrid(
                 modifier = Modifier.fillMaxSize(),
                 videos = videoMap[selectedCategory].orEmpty(),
-                navigator = navigator
+                navigator = navigator,
+                phoneLayout = phoneLayout
             )
         } else {
-            Row {
+            Row(horizontalArrangement = Arrangement.spacedBy(20.dp)) {
                 LazyColumn(
-                    modifier = Modifier.width(200.dp),
+                    modifier = Modifier.width(220.dp),
                     verticalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
                     items(categories) { category ->
-                        TvSurface(onClick = {}) {
+                        TvSurface(onClick = { selectedCategory = category }) {
                             Box(
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .padding(vertical = 4.dp),
+                                    .padding(horizontal = 6.dp, vertical = 10.dp),
                                 contentAlignment = Alignment.Center,
                             ) {
                                 Text(
                                     text = category,
-                                    color = if (selectedCategory == category) Color.White else Color.LightGray
+                                    color = if (selectedCategory == category) AppTextPrimary else AppTextSecondary
                                 )
                             }
                         }
@@ -134,31 +150,8 @@ fun SearchResultScreen(
                 SearchResultGrid(
                     modifier = Modifier.weight(1f),
                     videos = videoMap[selectedCategory].orEmpty(),
-                    navigator = navigator
-                )
-            }
-        }
-    }
-}
-
-@OptIn(ExperimentalLayoutApi::class)
-@Composable
-private fun CompactCategoryRow(
-    categories: List<String>,
-    selectedCategory: String?,
-    onSelect: (String) -> Unit
-) {
-    FlowRow(
-        modifier = Modifier.padding(bottom = 12.dp),
-        horizontalArrangement = Arrangement.spacedBy(8.dp),
-        verticalArrangement = Arrangement.spacedBy(8.dp)
-    ) {
-        categories.forEach { category ->
-            TvSurface(onClick = { onSelect(category) }) {
-                Text(
-                    text = category,
-                    color = if (selectedCategory == category) Color.White else Color.LightGray,
-                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 6.dp)
+                    navigator = navigator,
+                    phoneLayout = false
                 )
             }
         }
@@ -169,16 +162,24 @@ private fun CompactCategoryRow(
 private fun SearchResultGrid(
     modifier: Modifier,
     videos: List<com.loong.longtv.data.bean.Video>,
-    navigator: NavController
+    navigator: NavController,
+    phoneLayout: Boolean
 ) {
     LazyVerticalGrid(
         modifier = modifier,
-        columns = GridCells.Adaptive(150.dp)
+        columns = if (phoneLayout) GridCells.Fixed(2) else GridCells.Adaptive(150.dp),
+        contentPadding = PaddingValues(bottom = if (phoneLayout) 28.dp else 20.dp),
+        verticalArrangement = Arrangement.spacedBy(if (phoneLayout) 12.dp else 16.dp),
+        horizontalArrangement = Arrangement.spacedBy(if (phoneLayout) 12.dp else 16.dp)
     ) {
         items(videos) { video ->
             TvSurface(
                 onClick = {
-                    navigator.navigate(VideoDetail.createRoute(video.key, video.vod_id))
+                    val siteKey = runCatching { video.key }.getOrNull().orEmpty()
+                    val videoId = runCatching { video.vod_id }.getOrNull().orEmpty()
+                    if (siteKey.isNotBlank() && videoId.isNotBlank()) {
+                        navigator.navigate(VideoDetail.createRoute(siteKey, videoId))
+                    }
                 }
             ) {
                 VideoCard(video = video)
@@ -192,19 +193,19 @@ private fun SearchResultGrid(
 private fun SearchHeader(
     keyword: String,
     selectedCategory: String?,
-    resultCount: Int
+    resultCount: Int,
+    phoneLayout: Boolean
 ) {
     val family = selectedCategory?.substringAfter("[")?.substringBefore("]")?.takeIf { it.isNotBlank() }
     Column(modifier = Modifier.padding(bottom = 12.dp)) {
-        Text(
-            text = "搜索: $keyword",
-            color = Color.White,
-            fontSize = 18.sp
+        SectionHeader(
+            title = if (phoneLayout) "结果" else "搜索: $keyword",
+            subtitle = if (phoneLayout) "共 ${resultCount} 条结果" else "当前结果 ${resultCount} 条"
         )
         if (selectedCategory != null) {
             Text(
                 text = selectedCategory,
-                color = Color.LightGray,
+                color = AppTextSecondary,
                 fontSize = 14.sp,
                 modifier = Modifier.padding(top = 4.dp, bottom = 8.dp)
             )
@@ -218,7 +219,7 @@ private fun SearchHeader(
                 TvSurface(onClick = {}) {
                     Text(
                         text = "Spider: $family",
-                        color = Color.White,
+                        color = AppTextPrimary,
                         fontSize = 11.sp,
                         modifier = Modifier.padding(horizontal = 8.dp, vertical = 6.dp)
                     )
@@ -226,7 +227,7 @@ private fun SearchHeader(
                 TvSurface(onClick = {}) {
                     Text(
                         text = "结果: $resultCount",
-                        color = Color.White,
+                        color = AppTextPrimary,
                         fontSize = 11.sp,
                         modifier = Modifier.padding(horizontal = 8.dp, vertical = 6.dp)
                     )

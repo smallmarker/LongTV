@@ -194,7 +194,7 @@ class VideoDetailViewModel @Inject constructor(
         }
     }
 
-    fun saveProgress(positionMs: Long, durationMs: Long) {
+    fun saveProgress(positionMs: Long, durationMs: Long, updateResumeState: Boolean = false) {
         val state = _uiState.value
         val detail = state.detail ?: return
         val playInfo = detail.playInfos.getOrNull(state.selectedSourceIndex) ?: return
@@ -214,13 +214,15 @@ class VideoDetailViewModel @Inject constructor(
                     durationMs = durationMs,
                 )
             )
-            _uiState.update { it.copy(resumePositionMs = positionMs) }
+            if (updateResumeState) {
+                _uiState.update { it.copy(resumePositionMs = positionMs) }
+            }
         }
     }
 
     fun applyFullscreenProgress(positionMs: Long) {
         if (positionMs < 0) return
-        saveProgress(positionMs, 0)
+        saveProgress(positionMs, 0, updateResumeState = true)
     }
 
     fun toggleFavorite() {
