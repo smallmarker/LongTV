@@ -37,13 +37,18 @@ fun VideoPlayerView(
     repeat: Boolean = true,
     autoPlay: Boolean = true,
     showController: Boolean = false,
+    enableNativeController: Boolean = true,
+    controlState: PlayerControlState? = null,
     onProgressChanged: (Long, Long) -> Unit = { _, _ -> },
     onControllerVisibilityChanged: ((Boolean) -> Unit)? = null,
+    onPlaybackStateChanged: ((Int) -> Unit)? = null,
+    onPlayingChanged: ((Boolean) -> Unit)? = null,
     onPlaybackError: ((String) -> Unit)? = null,
 ) {
     val context = LocalContext.current
     val deviceClass = currentDeviceClass()
     val showTouchController = deviceClass != DeviceClass.TV
+    val useNativeController = enableNativeController && (showController || showTouchController)
     val player = remember(videoUrl, requestHeaders) {
         val httpFactory = DefaultHttpDataSource.Factory()
             .setAllowCrossProtocolRedirects(true)
@@ -77,8 +82,42 @@ fun VideoPlayerView(
         }
     }
 
-    DisposableEffect(player, onPlaybackError) {
+    LaunchedEffect(player, controlState, controlState?.commandVersion) {
+        val command = controlState?.consume() ?: return@LaunchedEffect
+        when (command) {
+            PlayerCommand.TogglePlayPause -> {
+                if (player.isPlaying) player.pause() else player.play()
+            }
+
+            is PlayerCommand.SeekBy -> {
+                val duration = player.duration.takeIf { it > 0 } ?: Long.MAX_VALUE
+                val target = (player.currentPosition + command.offsetMs)
+                    .coerceAtLeast(0L)
+                    .coerceAtMost(duration)
+                player.seekTo(target)
+            }
+
+            is PlayerCommand.SeekTo -> {
+                val duration = player.duration.takeIf { it > 0 } ?: Long.MAX_VALUE
+                player.seekTo(command.positionMs.coerceIn(0L, duration))
+            }
+
+            is PlayerCommand.SetSpeed -> {
+                player.setPlaybackSpeed(command.speed)
+            }
+        }
+    }
+
+    DisposableEffect(player, onPlaybackError, onPlaybackStateChanged, onPlayingChanged) {
         val listener = object : Player.Listener {
+            override fun onPlaybackStateChanged(playbackState: Int) {
+                onPlaybackStateChanged?.invoke(playbackState)
+            }
+
+            override fun onIsPlayingChanged(isPlaying: Boolean) {
+                onPlayingChanged?.invoke(isPlaying)
+            }
+
             override fun onPlayerError(error: PlaybackException) {
                 Log.e("VideoPlayerView", "player error for url=$videoUrl", error)
                 onPlaybackError?.invoke(error.message ?: "播放失败")
@@ -116,8 +155,8 @@ fun VideoPlayerView(
         factory = {
             PlayerView(context).apply {
                 this.player = player
-                this.useController = showController || showTouchController
-                this.controllerAutoShow = showController || showTouchController
+                this.useController = useNativeController
+                this.controllerAutoShow = useNativeController
                 this.controllerHideOnTouch = true
                 this.resizeMode = AspectRatioFrameLayout.RESIZE_MODE_FIT
                 setControllerVisibilityListener(
@@ -129,8 +168,8 @@ fun VideoPlayerView(
         },
         update = { playerView ->
             playerView.player = player
-            playerView.useController = showController || showTouchController
-            playerView.controllerAutoShow = showController || showTouchController
+            playerView.useController = useNativeController
+            playerView.controllerAutoShow = useNativeController
             playerView.controllerHideOnTouch = true
             playerView.resizeMode = AspectRatioFrameLayout.RESIZE_MODE_FIT
             playerView.setControllerVisibilityListener(

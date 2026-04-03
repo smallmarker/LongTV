@@ -47,15 +47,24 @@ fun SettingsScreen(
     val state by viewModel.uiState.collectAsStateWithLifecycle()
 
     AppScreen {
+        val singleSiteMode = state.sites.size <= 1
         if (phoneLayout) {
             AppPageHeader(
                 title = "设置",
-                subtitle = "手机端聚焦站点启停、默认站点和解析器状态。"
+                subtitle = if (singleSiteMode) {
+                    "当前为单站点模式，优先跑通 ddys 的完整观影流程。"
+                } else {
+                    "手机端聚焦站点启停、默认站点和解析器状态。"
+                }
             )
         } else {
             AppHero(
-                title = "播放与站点设置",
-                subtitle = "管理默认站点、启用的片源和内置解析能力，让 TV 与手机都按你的偏好工作。"
+                title = if (singleSiteMode) "单站点设置" else "播放与站点设置",
+                subtitle = if (singleSiteMode) {
+                    "当前只保留 ddys，一个站点先跑通首页、搜索、详情与播放。"
+                } else {
+                    "管理默认站点、启用的片源和内置解析能力，让 TV 与手机都按你的偏好工作。"
+                }
             )
         }
 
@@ -84,8 +93,12 @@ fun SettingsScreen(
         }
 
         SectionHeader(
-            title = "站点管理",
-            subtitle = "启用常用站点，并指定一个默认首页来源"
+            title = if (singleSiteMode) "当前站点" else "站点管理",
+            subtitle = if (singleSiteMode) {
+                "单站点模式下无需切换默认站点，只保留运行状态与基础信息。"
+            } else {
+                "启用常用站点，并指定一个默认首页来源"
+            }
         )
         LazyColumn(
             modifier = Modifier
@@ -94,13 +107,14 @@ fun SettingsScreen(
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
             items(state.sites) { item ->
-                SiteSettingCard(
-                    item = item,
-                    compact = compact,
-                    phoneLayout = phoneLayout,
-                    defaultSiteKey = state.defaultSiteKey,
-                    onDefault = { viewModel.setDefaultSite(item.site.key) },
-                    onToggle = { viewModel.toggleSite(item.site.key, !item.enabled) }
+                    SiteSettingCard(
+                        item = item,
+                        compact = compact,
+                        phoneLayout = phoneLayout,
+                        singleSiteMode = singleSiteMode,
+                        defaultSiteKey = state.defaultSiteKey,
+                        onDefault = { viewModel.setDefaultSite(item.site.key) },
+                        onToggle = { viewModel.toggleSite(item.site.key, !item.enabled) }
                 )
             }
         }
@@ -113,6 +127,7 @@ private fun SiteSettingCard(
     item: SiteToggleItem,
     compact: Boolean,
     phoneLayout: Boolean,
+    singleSiteMode: Boolean,
     defaultSiteKey: String,
     onDefault: () -> Unit,
     onToggle: () -> Unit
@@ -135,12 +150,14 @@ private fun SiteSettingCard(
                         horizontalArrangement = Arrangement.spacedBy(8.dp),
                         verticalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
-                        AppButton(text = if (item.enabled) "停用" else "启用", onClick = onToggle)
-                        AppButton(
-                            text = "设为默认",
-                            onClick = onDefault,
-                            enabled = item.enabled && defaultSiteKey != item.site.key
-                        )
+                        if (!singleSiteMode) {
+                            AppButton(text = if (item.enabled) "停用" else "启用", onClick = onToggle)
+                            AppButton(
+                                text = "设为默认",
+                                onClick = onDefault,
+                                enabled = item.enabled && defaultSiteKey != item.site.key
+                            )
+                        }
                     }
                 }
             }
@@ -158,12 +175,14 @@ private fun SiteSettingCard(
                         phoneLayout = false
                     )
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        AppButton(text = if (item.enabled) "停用" else "启用", onClick = onToggle)
-                        AppButton(
-                            text = "设为默认",
-                            onClick = onDefault,
-                            enabled = item.enabled && defaultSiteKey != item.site.key
-                        )
+                        if (!singleSiteMode) {
+                            AppButton(text = if (item.enabled) "停用" else "启用", onClick = onToggle)
+                            AppButton(
+                                text = "设为默认",
+                                onClick = onDefault,
+                                enabled = item.enabled && defaultSiteKey != item.site.key
+                            )
+                        }
                     }
                 }
             }
@@ -183,12 +202,14 @@ private fun SiteSettingCard(
                         modifier = Modifier.weight(1f)
                     )
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        AppButton(text = if (item.enabled) "停用" else "启用", onClick = onToggle)
-                        AppButton(
-                            text = "设为默认",
-                            onClick = onDefault,
-                            enabled = item.enabled && defaultSiteKey != item.site.key
-                        )
+                        if (!singleSiteMode) {
+                            AppButton(text = if (item.enabled) "停用" else "启用", onClick = onToggle)
+                            AppButton(
+                                text = "设为默认",
+                                onClick = onDefault,
+                                enabled = item.enabled && defaultSiteKey != item.site.key
+                            )
+                        }
                     }
                 }
             }

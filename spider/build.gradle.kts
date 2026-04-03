@@ -31,6 +31,7 @@ dependencies {
     implementation(libs.androidx.core.ktx)
     implementation(libs.gson)
     implementation("androidx.collection:collection:1.4.5")
+    implementation("org.jsoup:jsoup:1.18.3")
     implementation("com.squareup.okhttp3:okhttp:4.12.0")
     implementation("javax.inject:javax.inject:1")
 }

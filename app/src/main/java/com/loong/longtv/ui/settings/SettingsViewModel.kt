@@ -24,6 +24,7 @@ data class SiteToggleItem(
 )
 
 enum class SpiderFamily(val label: String) {
+    PRIVATE("私有模板"),
     LOCAL("本地"),
     CMS("CMS"),
     APP_V2("AppV2"),
@@ -34,6 +35,7 @@ enum class SpiderFamily(val label: String) {
 
 fun Site.spiderFamily(): SpiderFamily {
     return when {
+        api == "native_ddys" || key == "ddys" -> SpiderFamily.PRIVATE
         api == "local" -> SpiderFamily.LOCAL
         api == "native_app_v2" || key == "app_v2_template" -> SpiderFamily.APP_V2
         api == "native_meipa" -> SpiderFamily.APP_V2

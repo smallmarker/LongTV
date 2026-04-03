@@ -141,7 +141,7 @@ class HomeViewModel @Inject constructor(
 
     private fun buildTabs(homeContent: HomeContent?): List<HomeTabItem> {
         return buildList {
-            add(HomeTabItem(HOME_TAB_ID, "推荐"))
+            add(HomeTabItem(HOME_TAB_ID, "首页"))
             addAll(homeContent?.tabs.orEmpty())
         }.distinctBy { it.type_id }
     }

@@ -1,6 +1,8 @@
 package com.loong.longtv.ui.detail
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -13,27 +15,37 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.itemsIndexed
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.media3.common.Player
 import androidx.navigation.NavController
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.tv.material3.MaterialTheme
@@ -43,12 +55,17 @@ import com.loong.longtv.data.bean.PlayInfo
 import com.loong.longtv.data.player.PlayableMedia
 import com.loong.longtv.ui.common.DeviceClass
 import com.loong.longtv.ui.common.currentDeviceClass
+import com.loong.longtv.ui.theme.AppCardOverlay
+import com.loong.longtv.ui.theme.AppBackground
+import com.loong.longtv.ui.theme.AppBackgroundElevated
 import com.loong.longtv.ui.theme.AppError
 import com.loong.longtv.ui.theme.AppTextMuted
 import com.loong.longtv.ui.theme.AppTextPrimary
 import com.loong.longtv.ui.theme.AppTextSecondary
+import com.loong.longtv.ui.theme.BrandPrimary
+import com.loong.longtv.ui.theme.BrandSecondary
+import com.loong.longtv.ui.theme.BrandAccent
 import com.loong.longtv.ui.widgets.AppButton
-import com.loong.longtv.ui.widgets.AppScreen
 import com.loong.longtv.ui.widgets.SectionHeader
 import com.loong.longtv.ui.widgets.SmartAsyncImage
 import com.loong.longtv.ui.widgets.TvSurface
@@ -64,6 +81,16 @@ fun VideoDetailScreen(
     val deviceClass = currentDeviceClass()
     val compact = deviceClass != DeviceClass.TV
     val phoneLayout = deviceClass == DeviceClass.PHONE
+    val horizontalPadding = when (deviceClass) {
+        DeviceClass.PHONE -> 16.dp
+        DeviceClass.TABLET -> 20.dp
+        DeviceClass.TV -> 24.dp
+    }
+    val verticalPadding = when (deviceClass) {
+        DeviceClass.PHONE -> 16.dp
+        DeviceClass.TABLET -> 18.dp
+        DeviceClass.TV -> 20.dp
+    }
     val state by viewModel.uiState.collectAsStateWithLifecycle()
     val currentBackStackEntry by navigator.currentBackStackEntryAsState()
     val savedStateHandle = currentBackStackEntry?.savedStateHandle
@@ -132,103 +159,121 @@ fun VideoDetailScreen(
             val selectedSource = sources.getOrNull(state.selectedSourceIndex)
             val playableMedia = state.playableMedia
 
-            AppScreen(
-                modifier = Modifier.then(if (compact) Modifier.verticalScroll(rememberScrollState()) else Modifier)
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(
+                        brush = Brush.verticalGradient(
+                            colors = listOf(
+                                AppBackground,
+                                AppBackgroundElevated,
+                                AppBackground
+                            )
+                        )
+                    )
             ) {
-                SectionHeader(
-                    title = detail.vod_name.safeText("未命名视频"),
-                    subtitle = if (phoneLayout) {
-                        "手机端优先展示播放决策信息，减少无关技术字段干扰。"
-                    } else {
-                        "查看剧集信息、切换线路并进入全屏播放"
-                    }
-                )
-                Spacer(modifier = Modifier.height(18.dp))
-                if (compact) {
-                    Column(verticalArrangement = Arrangement.spacedBy(20.dp)) {
-                        DetailPreviewBlock(
-                            compact = compact,
-                            detail = detail,
-                            playableMedia = playableMedia,
-                            resumePositionMs = state.resumePositionMs,
-                            onProgressChanged = viewModel::saveProgress
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(if (compact) 238.dp else 300.dp)
+                        .background(
+                            Brush.verticalGradient(
+                                colors = listOf(
+                                    Color.Black,
+                                    Color.Black.copy(alpha = 0.88f)
+                                )
+                            )
                         )
-                        DetailInfoBlock(
-                            navigator = navigator,
-                            state = state,
-                            detail = detail,
-                            selectedSource = selectedSource,
-                            playableMedia = playableMedia,
-                            phoneLayout = phoneLayout,
-                            onToggleFavorite = viewModel::toggleFavorite,
-                            onOpenFullscreen = ::openFullscreen,
-                            onPlayCurrent = {
-                                if (selectedSource != null) {
-                                    viewModel.playEpisode(selectedSource, state.selectedEpisodeIndex)
-                                }
-                            },
-                            onRetryCurrent = viewModel::retryCurrentEpisode,
-                            onClearError = viewModel::clearError
-                        )
-                    }
-                } else {
-                    Row(horizontalArrangement = Arrangement.spacedBy(24.dp)) {
-                        DetailPreviewBlock(
-                            compact = compact,
-                            detail = detail,
-                            playableMedia = playableMedia,
-                            resumePositionMs = state.resumePositionMs,
-                            onProgressChanged = viewModel::saveProgress
-                        )
-                        DetailInfoBlock(
-                            navigator = navigator,
-                            modifier = Modifier.weight(1f),
-                            state = state,
-                            detail = detail,
-                            selectedSource = selectedSource,
-                            playableMedia = playableMedia,
-                            phoneLayout = false,
-                            onToggleFavorite = viewModel::toggleFavorite,
-                            onOpenFullscreen = ::openFullscreen,
-                            onPlayCurrent = {
-                                if (selectedSource != null) {
-                                    viewModel.playEpisode(selectedSource, state.selectedEpisodeIndex)
-                                }
-                            },
-                            onRetryCurrent = viewModel::retryCurrentEpisode,
-                            onClearError = viewModel::clearError
-                        )
-                    }
+                ) {
+                    DetailPreviewBlock(
+                        modifier = Modifier.fillMaxSize(),
+                        detail = detail,
+                        playableMedia = playableMedia,
+                        resumePositionMs = state.resumePositionMs,
+                        selectedSource = selectedSource,
+                        selectedEpisodeIndex = state.selectedEpisodeIndex,
+                        onBack = { navigator.popBackStack() },
+                        onOpenFullscreen = ::openFullscreen,
+                        onProgressChanged = viewModel::saveProgress
+                    )
                 }
 
-                Spacer(modifier = Modifier.height(24.dp))
-                SectionHeader(
-                    title = "播放线路",
-                    subtitle = if (phoneLayout) "先切换来源，再决定是否播放当前集" else "切换不同来源尝试更稳定的播放效果"
-                )
-                Spacer(modifier = Modifier.height(12.dp))
-                SourceRow(
-                    sources = sources,
-                    selectedIndex = state.selectedSourceIndex,
-                    onSelect = viewModel::selectSource,
-                    phoneLayout = phoneLayout
-                )
-
-                Spacer(modifier = Modifier.height(24.dp))
-                SectionHeader(
-                    title = "选集",
-                    subtitle = if (phoneLayout) "手机端默认按网格展示，便于快速点选" else "快速定位到想看的集数"
-                )
-                Spacer(modifier = Modifier.height(12.dp))
-                EpisodeGrid(
-                    compact = compact,
-                    phoneLayout = phoneLayout,
-                    playInfo = selectedSource,
-                    selectedIndex = state.selectedEpisodeIndex,
-                    onSelect = { playInfo, episodeIndex ->
-                        viewModel.playEpisode(playInfo, episodeIndex)
+                Column(
+                    modifier = Modifier
+                        .weight(1f)
+                        .fillMaxWidth()
+                        .verticalScroll(rememberScrollState())
+                        .padding(horizontal = horizontalPadding, vertical = verticalPadding)
+                ) {
+                    if (compact) {
+                        Column(verticalArrangement = Arrangement.spacedBy(20.dp)) {
+                            DetailInfoBlock(
+                                navigator = navigator,
+                                state = state,
+                                detail = detail,
+                                selectedSource = selectedSource,
+                                playableMedia = playableMedia,
+                                resumePositionMs = state.resumePositionMs,
+                                phoneLayout = phoneLayout,
+                                onToggleFavorite = viewModel::toggleFavorite,
+                                onPlayCurrent = {
+                                    if (selectedSource != null) {
+                                        viewModel.playEpisode(selectedSource, state.selectedEpisodeIndex)
+                                    }
+                                },
+                                onRetryCurrent = viewModel::retryCurrentEpisode,
+                                onClearError = viewModel::clearError
+                            )
+                        }
+                    } else {
+                        DetailInfoBlock(
+                            navigator = navigator,
+                            state = state,
+                            detail = detail,
+                            selectedSource = selectedSource,
+                            playableMedia = playableMedia,
+                            resumePositionMs = state.resumePositionMs,
+                            phoneLayout = false,
+                            onToggleFavorite = viewModel::toggleFavorite,
+                            onPlayCurrent = {
+                                if (selectedSource != null) {
+                                    viewModel.playEpisode(selectedSource, state.selectedEpisodeIndex)
+                                }
+                            },
+                            onRetryCurrent = viewModel::retryCurrentEpisode,
+                            onClearError = viewModel::clearError
+                        )
                     }
-                )
+
+                    Spacer(modifier = Modifier.height(24.dp))
+                    SectionHeader(
+                        title = "播放线路",
+                        subtitle = if (phoneLayout) "先切换来源，再决定是否播放当前集" else "切换不同来源尝试更稳定的播放效果"
+                    )
+                    Spacer(modifier = Modifier.height(12.dp))
+                    SourceRow(
+                        sources = sources,
+                        selectedIndex = state.selectedSourceIndex,
+                        onSelect = viewModel::selectSource,
+                        phoneLayout = phoneLayout
+                    )
+
+                    Spacer(modifier = Modifier.height(24.dp))
+                    SectionHeader(
+                        title = "选集",
+                        subtitle = if (phoneLayout) "手机端默认按网格展示，便于快速点选" else "快速定位到想看的集数"
+                    )
+                    Spacer(modifier = Modifier.height(12.dp))
+                    EpisodeGrid(
+                        compact = compact,
+                        phoneLayout = phoneLayout,
+                        playInfo = selectedSource,
+                        selectedIndex = state.selectedEpisodeIndex,
+                        onSelect = { playInfo, episodeIndex ->
+                            viewModel.playEpisode(playInfo, episodeIndex)
+                        }
+                    )
+                }
             }
         }
     }
@@ -236,38 +281,169 @@ fun VideoDetailScreen(
 
 @Composable
 private fun DetailPreviewBlock(
-    compact: Boolean,
+    modifier: Modifier = Modifier,
     detail: com.loong.longtv.data.bean.Video,
     playableMedia: PlayableMedia?,
     resumePositionMs: Long,
+    selectedSource: PlayInfo?,
+    selectedEpisodeIndex: Int,
+    onBack: () -> Unit,
+    onOpenFullscreen: (PlayableMedia, String) -> Unit,
     onProgressChanged: (Long, Long) -> Unit
 ) {
-    val previewModifier = if (compact) {
-        Modifier
-            .fillMaxWidth()
-            .height(220.dp)
-    } else {
-        Modifier
-            .width(420.dp)
-            .height(236.dp)
+    val title = detail.vod_name.safeText("未命名视频")
+    val episodeName = selectedSource?.urlInfos?.getOrNull(selectedEpisodeIndex)?.name.orEmpty()
+    var currentPositionMs by remember(playableMedia?.url, resumePositionMs) { mutableLongStateOf(resumePositionMs) }
+    var durationMs by remember(playableMedia?.url) { mutableLongStateOf(0L) }
+    var isPlaying by remember(playableMedia?.url) { mutableStateOf(false) }
+    var isBuffering by remember(playableMedia?.url) { mutableStateOf(false) }
+
+    Box(
+        modifier = modifier
+            .background(AppCardOverlay)
+    ) {
+        if (playableMedia?.url?.isNotBlank() == true && !playableMedia.requiresParse) {
+            VideoPlayerView(
+                modifier = Modifier.fillMaxSize(),
+                videoUrl = playableMedia.url,
+                requestHeaders = playableMedia.headers,
+                initialPositionMs = resumePositionMs,
+                enableNativeController = false,
+                onProgressChanged = { position, duration ->
+                    currentPositionMs = position
+                    durationMs = duration
+                    onProgressChanged(position, duration)
+                },
+                onPlaybackStateChanged = { state ->
+                    isBuffering = state == Player.STATE_BUFFERING
+                },
+                onPlayingChanged = { playing ->
+                    isPlaying = playing
+                }
+            )
+        } else {
+            SmartAsyncImage(
+                model = detail.vod_pic,
+                contentDescription = title,
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(MaterialTheme.colorScheme.surfaceVariant),
+                contentScale = ContentScale.Crop,
+                fallbackText = title
+            )
+        }
+
+        Box(
+            modifier = Modifier
+                .matchParentSize()
+                .background(
+                    Brush.verticalGradient(
+                        colors = listOf(
+                            Color(0x6607101C),
+                            Color.Transparent,
+                            Color(0xE607101C)
+                        )
+                    )
+                )
+        )
+
+        PreviewBackButton(
+            modifier = Modifier
+                .align(Alignment.TopStart)
+                .padding(start = 12.dp, top = 12.dp),
+            onClick = onBack
+        )
+
+        Row(
+            modifier = Modifier
+                .align(Alignment.BottomStart)
+                .fillMaxWidth()
+                .padding(start = 16.dp, end = 16.dp, bottom = 6.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            MiniPlayPauseIcon(
+                isPlaying = isPlaying,
+                modifier = Modifier.padding(end = 8.dp)
+            )
+            Text(
+                text = when {
+                    playableMedia == null -> "--:--"
+                    playableMedia.requiresParse -> "--:--"
+                    else -> formatPlayerTime(currentPositionMs)
+                },
+                color = AppTextMuted,
+                fontSize = 12.sp,
+                modifier = Modifier.padding(end = 10.dp)
+            )
+            Box(
+                modifier = Modifier
+                    .weight(1f)
+                    .height(5.dp)
+                    .clip(RoundedCornerShape(999.dp))
+                    .background(Color.White.copy(alpha = 0.15f))
+            ) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth(playbackProgress(currentPositionMs, durationMs))
+                        .height(5.dp)
+                        .background(
+                            Brush.horizontalGradient(
+                                listOf(BrandPrimary, Color(0xFFFF7F58))
+                            )
+                        )
+                )
+            }
+            Text(
+                text = when {
+                    playableMedia == null -> "--:--"
+                    playableMedia.requiresParse -> "--:--"
+                    durationMs > 0 -> formatPlayerTime(durationMs)
+                    else -> "--:--"
+                },
+                color = AppTextMuted,
+                fontSize = 12.sp,
+                modifier = Modifier.padding(start = 10.dp)
+            )
+            if (playableMedia != null && !playableMedia.requiresParse && playableMedia.url.isNotBlank()) {
+                FullscreenIconButton(
+                    modifier = Modifier.padding(start = 10.dp),
+                    onClick = { onOpenFullscreen(playableMedia, episodeName) }
+                )
+            }
+        }
     }
-    if (playableMedia?.url?.isNotBlank() == true && !playableMedia.requiresParse) {
-        VideoPlayerView(
-            modifier = previewModifier,
-            videoUrl = playableMedia.url,
-            requestHeaders = playableMedia.headers,
-            initialPositionMs = resumePositionMs,
-            onProgressChanged = onProgressChanged
-        )
-    } else {
-        val title = detail.vod_name.safeText("未命名视频")
-        SmartAsyncImage(
-            model = detail.vod_pic,
-            contentDescription = title,
-            modifier = previewModifier.background(MaterialTheme.colorScheme.surfaceVariant),
-            contentScale = ContentScale.Crop,
-            fallbackText = title
-        )
+}
+
+@Composable
+private fun MiniPlayPauseIcon(
+    isPlaying: Boolean,
+    modifier: Modifier = Modifier
+) {
+    Canvas(modifier = modifier.size(12.dp)) {
+        if (isPlaying) {
+            val barWidth = size.width * 0.22f
+            val gap = size.width * 0.16f
+            drawRoundRect(
+                color = AppTextMuted,
+                topLeft = androidx.compose.ui.geometry.Offset(size.width * 0.2f, 0f),
+                size = androidx.compose.ui.geometry.Size(barWidth, size.height),
+                cornerRadius = androidx.compose.ui.geometry.CornerRadius(barWidth / 2f, barWidth / 2f)
+            )
+            drawRoundRect(
+                color = AppTextMuted,
+                topLeft = androidx.compose.ui.geometry.Offset(size.width * 0.2f + barWidth + gap, 0f),
+                size = androidx.compose.ui.geometry.Size(barWidth, size.height),
+                cornerRadius = androidx.compose.ui.geometry.CornerRadius(barWidth / 2f, barWidth / 2f)
+            )
+        } else {
+            val path = androidx.compose.ui.graphics.Path().apply {
+                moveTo(size.width * 0.18f, size.height * 0.08f)
+                lineTo(size.width * 0.82f, size.height * 0.5f)
+                lineTo(size.width * 0.18f, size.height * 0.92f)
+                close()
+            }
+            drawPath(path = path, color = AppTextMuted)
+        }
     }
 }
 
@@ -279,9 +455,9 @@ private fun DetailInfoBlock(
     detail: com.loong.longtv.data.bean.Video,
     selectedSource: PlayInfo?,
     playableMedia: PlayableMedia?,
+    resumePositionMs: Long,
     phoneLayout: Boolean,
     onToggleFavorite: () -> Unit,
-    onOpenFullscreen: (PlayableMedia, String) -> Unit,
     onPlayCurrent: () -> Unit,
     onRetryCurrent: () -> Unit,
     onClearError: () -> Unit,
@@ -330,10 +506,19 @@ private fun DetailInfoBlock(
             lineHeight = if (phoneLayout) 19.sp else 21.sp
         )
         Spacer(modifier = Modifier.height(16.dp))
+        PlaybackDecisionCard(
+            playableMedia = playableMedia,
+            selectedSource = selectedSource,
+            selectedEpisodeIndex = state.selectedEpisodeIndex,
+            resumePositionMs = resumePositionMs,
+            phoneLayout = phoneLayout
+        )
+        Spacer(modifier = Modifier.height(16.dp))
         CurrentPlaybackInfo(
             selectedSource = selectedSource,
             selectedEpisodeIndex = state.selectedEpisodeIndex,
             playableMedia = playableMedia,
+            resumePositionMs = resumePositionMs,
             phoneLayout = phoneLayout
         )
         Spacer(modifier = Modifier.height(16.dp))
@@ -343,14 +528,10 @@ private fun DetailInfoBlock(
         ) {
             AppButton(text = if (state.favorite) "取消收藏" else "收藏", onClick = onToggleFavorite)
             if (selectedSource != null && playableMedia == null && selectedSource.urlInfos.isNotEmpty()) {
-                AppButton(text = "播放当前集", onClick = onPlayCurrent)
+                AppButton(text = if (resumePositionMs > 0) "继续观看" else "播放当前集", onClick = onPlayCurrent)
             }
             if (playableMedia != null && !playableMedia.requiresParse && playableMedia.url.isNotBlank()) {
-                val episodeName = selectedSource?.urlInfos?.getOrNull(state.selectedEpisodeIndex)?.name.orEmpty()
-                AppButton(
-                    text = "全屏播放",
-                    onClick = { onOpenFullscreen(playableMedia, episodeName) }
-                )
+                AppButton(text = "重新获取片源", onClick = onRetryCurrent)
             }
         }
         if (state.playerLoading) {
@@ -390,12 +571,128 @@ private fun DetailChip(text: String) {
     }
 }
 
+@Composable
+private fun PlaybackDecisionCard(
+    playableMedia: PlayableMedia?,
+    selectedSource: PlayInfo?,
+    selectedEpisodeIndex: Int,
+    resumePositionMs: Long,
+    phoneLayout: Boolean
+) {
+    val episodeName = selectedSource?.urlInfos?.getOrNull(selectedEpisodeIndex)?.name.orEmpty()
+    val decisionText = when {
+        playableMedia == null -> "选定线路后可直接预览，适合先试播再进全屏。"
+        playableMedia.requiresParse -> "当前线路返回的是中转页，建议优先切换其他线路。"
+        resumePositionMs > 0 -> "已保存上次进度，适合直接继续观看。"
+        else -> "当前片源已可直播，适合直接进入全屏沉浸观看。"
+    }
+    TvSurface(onClick = {}) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp, vertical = 14.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            Text(
+                text = "播放建议",
+                color = AppTextPrimary,
+                fontSize = if (phoneLayout) 15.sp else 16.sp,
+                fontWeight = FontWeight.SemiBold
+            )
+            Text(
+                text = buildString {
+                    append(decisionText)
+                    if (episodeName.isNotBlank()) append(" 当前选择：").append(episodeName).append("。")
+                },
+                color = AppTextSecondary,
+                fontSize = 13.sp,
+                lineHeight = 19.sp
+            )
+        }
+    }
+}
+
+@Composable
+private fun FullscreenIconButton(
+    modifier: Modifier = Modifier,
+    onClick: () -> Unit
+) {
+    Box(
+        modifier = modifier
+            .clickable(onClick = onClick)
+            .padding(2.dp),
+        contentAlignment = Alignment.Center
+    ) {
+        ExpandCornersIcon(size = 16.dp, color = AppTextPrimary)
+    }
+}
+
+@Composable
+private fun PreviewBackButton(
+    modifier: Modifier = Modifier,
+    onClick: () -> Unit
+) {
+    Box(
+        modifier = modifier
+            .clickable(onClick = onClick)
+            .padding(4.dp),
+        contentAlignment = Alignment.Center
+    ) {
+        Canvas(modifier = Modifier.size(18.dp)) {
+            val stroke = size.minDimension * 0.14f
+            val centerY = size.height / 2f
+            val leftX = size.width * 0.22f
+            val rightX = size.width * 0.76f
+            drawLine(
+                color = AppTextPrimary,
+                start = androidx.compose.ui.geometry.Offset(rightX, size.height * 0.16f),
+                end = androidx.compose.ui.geometry.Offset(leftX, centerY),
+                strokeWidth = stroke,
+                cap = StrokeCap.Round
+            )
+            drawLine(
+                color = AppTextPrimary,
+                start = androidx.compose.ui.geometry.Offset(leftX, centerY),
+                end = androidx.compose.ui.geometry.Offset(rightX, size.height * 0.84f),
+                strokeWidth = stroke,
+                cap = StrokeCap.Round
+            )
+        }
+    }
+}
+
+@Composable
+private fun ExpandCornersIcon(
+    size: Dp,
+    color: Color
+) {
+    Canvas(modifier = Modifier.size(size)) {
+        val stroke = size.toPx() * 0.1f
+        val inset = stroke
+        val arm = size.toPx() * 0.32f
+        val max = size.toPx() - inset
+
+        drawLine(color, start = androidx.compose.ui.geometry.Offset(inset, arm + inset), end = androidx.compose.ui.geometry.Offset(inset, inset), strokeWidth = stroke, cap = StrokeCap.Round)
+        drawLine(color, start = androidx.compose.ui.geometry.Offset(inset, inset), end = androidx.compose.ui.geometry.Offset(arm + inset, inset), strokeWidth = stroke, cap = StrokeCap.Round)
+
+        drawLine(color, start = androidx.compose.ui.geometry.Offset(max - arm, inset), end = androidx.compose.ui.geometry.Offset(max, inset), strokeWidth = stroke, cap = StrokeCap.Round)
+        drawLine(color, start = androidx.compose.ui.geometry.Offset(max, inset), end = androidx.compose.ui.geometry.Offset(max, arm + inset), strokeWidth = stroke, cap = StrokeCap.Round)
+
+        drawLine(color, start = androidx.compose.ui.geometry.Offset(inset, max - arm), end = androidx.compose.ui.geometry.Offset(inset, max), strokeWidth = stroke, cap = StrokeCap.Round)
+        drawLine(color, start = androidx.compose.ui.geometry.Offset(inset, max), end = androidx.compose.ui.geometry.Offset(arm + inset, max), strokeWidth = stroke, cap = StrokeCap.Round)
+
+        drawLine(color, start = androidx.compose.ui.geometry.Offset(max - arm, max), end = androidx.compose.ui.geometry.Offset(max, max), strokeWidth = stroke, cap = StrokeCap.Round)
+        drawLine(color, start = androidx.compose.ui.geometry.Offset(max, max - arm), end = androidx.compose.ui.geometry.Offset(max, max), strokeWidth = stroke, cap = StrokeCap.Round)
+    }
+}
+
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun CurrentPlaybackInfo(
     selectedSource: PlayInfo?,
     selectedEpisodeIndex: Int,
     playableMedia: PlayableMedia?,
+    resumePositionMs: Long,
     phoneLayout: Boolean
 ) {
     val episodeName = selectedSource?.urlInfos?.getOrNull(selectedEpisodeIndex)?.name.orEmpty()
@@ -415,6 +712,9 @@ private fun CurrentPlaybackInfo(
             if (playableMedia.resolutionNote.isNotBlank()) {
                 DetailChip(text = playableMedia.resolutionNote)
             }
+        }
+        if (resumePositionMs > 0) {
+            DetailChip(text = "进度: ${formatPlayerTime(resumePositionMs)}")
         }
     }
 }

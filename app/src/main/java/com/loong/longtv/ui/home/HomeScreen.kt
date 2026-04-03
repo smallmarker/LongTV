@@ -13,7 +13,11 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.Image
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
@@ -23,6 +27,9 @@ import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Favorite
+import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.runtime.Composable
@@ -30,8 +37,11 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.scale
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -41,6 +51,7 @@ import androidx.navigation.NavController
 import androidx.tv.material3.ExperimentalTvMaterial3Api
 import androidx.tv.material3.Icon
 import androidx.tv.material3.Text
+import com.loong.longtv.R
 import com.loong.longtv.Screen
 import com.loong.longtv.data.bean.CategoryContent
 import com.loong.longtv.data.bean.HomeTabItem
@@ -52,10 +63,6 @@ import com.loong.longtv.ui.theme.AppError
 import com.loong.longtv.ui.theme.AppTextMuted
 import com.loong.longtv.ui.theme.AppTextPrimary
 import com.loong.longtv.ui.theme.BrandPrimary
-import com.loong.longtv.ui.settings.spiderFamily
-import com.loong.longtv.ui.widgets.AdaptiveSiteSelector
-import com.loong.longtv.ui.widgets.AppHero
-import com.loong.longtv.ui.widgets.AppPageHeader
 import com.loong.longtv.ui.widgets.AppScreen
 import com.loong.longtv.ui.widgets.AppButton
 import com.loong.longtv.ui.widgets.SectionHeader
@@ -71,14 +78,9 @@ fun HomeScreen(navController: NavController, viewModel: HomeViewModel = hiltView
 
     AppScreen {
         if (phoneLayout) {
-            AppPageHeader(
-                title = uiState.currentSite?.name ?: "LongTV",
-                subtitle = buildString {
-                    append("首页聚焦片单浏览和站点切换。")
-                    uiState.currentSite?.let {
-                        append(" 当前来源：").append(it.spiderFamily().label)
-                    }
-                }
+            HomeCompactHeader(
+                siteName = uiState.currentSite?.name,
+                subtitle = "首页聚焦片单浏览、搜索与播放。"
             )
             QuickActions(
                 navController = navController,
@@ -86,24 +88,12 @@ fun HomeScreen(navController: NavController, viewModel: HomeViewModel = hiltView
                 modifier = Modifier.padding(top = 14.dp)
             )
         } else {
-            AppHero(
-                title = uiState.currentSite?.name ?: "探索影视内容",
-                subtitle = buildString {
-                    append("首页、搜索、详情和播放管理统一成更适合 TV 与手机的内容流体验。")
-                    uiState.currentSite?.let {
-                        append(" 当前来源为 ").append(it.spiderFamily().label)
-                    }
-                },
+            HomeHeroHeader(
+                siteName = uiState.currentSite?.name,
+                subtitle = "直接浏览影视分类和内容片单，减少额外信息干扰。",
                 trailing = { QuickActions(navController = navController, compact = false) }
             )
         }
-
-        SiteSelectorRow(
-            sites = uiState.sites,
-            currentSite = uiState.currentSite,
-            onSiteClick = viewModel::selectSite,
-            phoneLayout = phoneLayout
-        )
 
         when (val state = uiState.homeState) {
             is ApiResult.Loading -> LoadingScreen("正在加载站点首页...")
@@ -122,6 +112,155 @@ fun HomeScreen(navController: NavController, viewModel: HomeViewModel = hiltView
                 onRetry = viewModel::refresh,
                 onTabSelected = viewModel::selectTab,
                 navController = navController
+            )
+        }
+    }
+}
+
+@Composable
+private fun HomeCompactHeader(
+    siteName: String?,
+    subtitle: String,
+    modifier: Modifier = Modifier
+) {
+    Row(
+        modifier = modifier
+            .fillMaxWidth()
+            .clip(androidx.compose.foundation.shape.RoundedCornerShape(20.dp))
+            .background(
+                Brush.horizontalGradient(
+                    colors = listOf(
+                        Color.White.copy(alpha = 0.08f),
+                        Color.White.copy(alpha = 0.03f)
+                    )
+                )
+            )
+            .border(
+                width = 1.dp,
+                color = Color.White.copy(alpha = 0.08f),
+                shape = androidx.compose.foundation.shape.RoundedCornerShape(20.dp)
+            )
+            .padding(horizontal = 16.dp, vertical = 12.dp),
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        LongTvLogo(compact = true)
+
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                text = "当前站点：${siteName?.ifBlank { "未选择" } ?: "未选择"}",
+                color = AppTextPrimary,
+                fontSize = 16.sp,
+                fontWeight = FontWeight.SemiBold,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+            Text(
+                text = subtitle,
+                color = AppTextMuted,
+                fontSize = 12.sp,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.padding(top = 2.dp)
+            )
+        }
+    }
+}
+
+@Composable
+private fun HomeHeroHeader(
+    siteName: String?,
+    subtitle: String,
+    trailing: @Composable () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    Row(
+        modifier = modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(26.dp))
+            .background(
+                Brush.horizontalGradient(
+                    colors = listOf(
+                        Color.White.copy(alpha = 0.08f),
+                        Color.White.copy(alpha = 0.03f)
+                    )
+                )
+            )
+            .border(
+                width = 1.dp,
+                color = Color.White.copy(alpha = 0.08f),
+                shape = RoundedCornerShape(26.dp)
+            )
+            .padding(horizontal = 22.dp, vertical = 18.dp),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Column(modifier = Modifier.weight(1f)) {
+            LongTvLogo(compact = false)
+            Text(
+                text = "当前站点：${siteName?.ifBlank { "未选择" } ?: "未选择"}",
+                color = AppTextPrimary,
+                fontSize = 15.sp,
+                fontWeight = FontWeight.SemiBold,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.padding(top = 12.dp)
+            )
+            Text(
+                text = subtitle,
+                color = AppTextMuted,
+                fontSize = 14.sp,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.padding(top = 6.dp)
+            )
+        }
+        Spacer(modifier = Modifier.width(20.dp))
+        trailing()
+    }
+}
+
+@Composable
+private fun LongTvLogo(
+    compact: Boolean,
+    modifier: Modifier = Modifier
+) {
+    Row(
+        modifier = modifier,
+        horizontalArrangement = Arrangement.spacedBy(if (compact) 10.dp else 14.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Box(
+            modifier = Modifier
+                .size(if (compact) 40.dp else 54.dp)
+                .clip(RoundedCornerShape(if (compact) 14.dp else 18.dp))
+                .background(Color.White.copy(alpha = 0.06f))
+                .padding(if (compact) 2.dp else 3.dp)
+        ) {
+            Image(
+                painter = painterResource(id = R.mipmap.ic_launcher),
+                contentDescription = "LongTV Logo",
+                contentScale = ContentScale.Crop,
+                modifier = Modifier
+                    .fillMaxSize()
+                    .clip(RoundedCornerShape(if (compact) 12.dp else 15.dp))
+            )
+        }
+
+        Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+            Text(
+                text = "LongTV",
+                color = AppTextPrimary,
+                fontSize = if (compact) 18.sp else 28.sp,
+                fontWeight = FontWeight.Black,
+                maxLines = 1
+            )
+            Text(
+                text = if (compact) "你的影视盒子" else "更轻快地发现和播放内容",
+                color = if (compact) AppTextMuted else Color.White.copy(alpha = 0.72f),
+                fontSize = if (compact) 11.sp else 13.sp,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
             )
         }
     }
@@ -146,25 +285,49 @@ private fun QuickActions(
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
         QuickAction(
-            icon = { Icon(imageVector = Icons.Default.Search, contentDescription = "搜索") },
+            icon = {
+                Icon(
+                    imageVector = Icons.Default.Search,
+                    contentDescription = "搜索",
+                    tint = Color.White
+                )
+            },
             label = "搜索",
             compact = compact,
             onClick = { navController.navigate(Screen.Search.route) }
         )
         QuickAction(
-            icon = {},
+            icon = {
+                Icon(
+                    imageVector = Icons.Default.Star,
+                    contentDescription = "历史",
+                    tint = Color.White
+                )
+            },
             label = "历史",
             compact = compact,
             onClick = { navController.navigate(Screen.History.route) }
         )
         QuickAction(
-            icon = {},
+            icon = {
+                Icon(
+                    imageVector = Icons.Default.Favorite,
+                    contentDescription = "收藏",
+                    tint = Color.White
+                )
+            },
             label = "收藏",
             compact = compact,
             onClick = { navController.navigate(Screen.Favorite.route) }
         )
         QuickAction(
-            icon = { Icon(imageVector = Icons.Default.Settings, contentDescription = "设置") },
+            icon = {
+                Icon(
+                    imageVector = Icons.Default.Settings,
+                    contentDescription = "设置",
+                    tint = Color.White
+                )
+            },
             label = "设置",
             compact = compact,
             onClick = { navController.navigate(Screen.Settings.route) }
@@ -205,34 +368,6 @@ private fun QuickAction(
 
 @OptIn(ExperimentalLayoutApi::class, ExperimentalTvMaterial3Api::class)
 @Composable
-private fun SiteSelectorRow(
-    sites: List<Site>,
-    currentSite: Site?,
-    onSiteClick: (String) -> Unit,
-    phoneLayout: Boolean
-) {
-    if (sites.isEmpty()) return
-
-    Column(modifier = Modifier.padding(top = 22.dp)) {
-        SectionHeader(
-            title = "内容来源",
-            subtitle = if (phoneLayout) {
-                "手机端使用横向滚动站点条，避免拥挤和换行错乱"
-            } else {
-                "切换站点，快速对比不同片源与分类"
-            }
-        )
-        AdaptiveSiteSelector(
-            sites = sites,
-            currentSiteKey = currentSite?.key,
-            onSelect = onSiteClick,
-            modifier = Modifier.padding(top = 12.dp)
-        )
-    }
-}
-
-@OptIn(ExperimentalLayoutApi::class, ExperimentalTvMaterial3Api::class)
-@Composable
 private fun HomeContentSection(
     tabs: List<HomeTabItem>,
     selectedTabIndex: Int,
@@ -245,36 +380,12 @@ private fun HomeContentSection(
     navController: NavController
 ) {
     Column(modifier = Modifier.fillMaxSize()) {
-        if (currentSite != null) {
-            Column(modifier = Modifier.padding(vertical = 20.dp)) {
-                SectionHeader(
-                    title = currentSite.name,
-                    subtitle = if (phoneLayout) {
-                        "当前站点与分类入口"
-                    } else {
-                        "按分类浏览、选择线路，并继续观看感兴趣的内容"
-                    }
-                )
-                FlowRow(
-                    modifier = Modifier.padding(top = 8.dp),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    verticalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    HomeChip(text = currentSite.spiderFamily().label)
-                    if (!phoneLayout) {
-                        HomeChip(text = "key: ${currentSite.key}")
-                        HomeChip(text = "api: ${currentSite.api}")
-                    }
-                }
-            }
-        }
-
         if (tabs.isNotEmpty()) {
             HomeTabsRow(
                 items = tabs.map { it.type_name.ifBlank { "未命名分类" } },
                 selectedIndex = selectedTabIndex,
                 onSelect = onTabSelected,
-                modifier = Modifier.padding(bottom = 4.dp)
+                modifier = Modifier.padding(top = 18.dp)
             )
         }
 
@@ -320,8 +431,12 @@ private fun HomeTabsRow(
 
     LazyRow(
         state = listState,
-        modifier = modifier,
-        horizontalArrangement = Arrangement.spacedBy(8.dp)
+        modifier = modifier
+            .fillMaxWidth()
+            .height(42.dp),
+        contentPadding = PaddingValues(horizontal = 2.dp),
+        horizontalArrangement = Arrangement.spacedBy(6.dp),
+        verticalAlignment = Alignment.CenterVertically
     ) {
         itemsIndexed(items) { index, item ->
             HomeTabChip(
@@ -340,44 +455,41 @@ private fun HomeTabChip(
     onClick: () -> Unit
 ) {
     TvSurface(onClick = onClick) {
-        Box(
+        Row(
             modifier = Modifier
-                .scale(if (selected) 1.04f else 1f)
-                .clip(androidx.compose.foundation.shape.RoundedCornerShape(14.dp))
+                .clip(RoundedCornerShape(999.dp))
                 .background(
-                    if (selected) BrandPrimary.copy(alpha = 0.22f) else Color.Transparent
+                    if (selected) Color.White.copy(alpha = 0.16f) else Color.White.copy(alpha = 0.04f)
                 )
-                .border(
-                    width = if (selected) 1.4.dp else 1.dp,
-                    color = if (selected) BrandPrimary.copy(alpha = 0.9f) else Color.White.copy(alpha = 0.08f),
-                    shape = androidx.compose.foundation.shape.RoundedCornerShape(14.dp)
-                )
-                .padding(
-                    horizontal = if (selected) 14.dp else 12.dp,
-                    vertical = if (selected) 9.dp else 8.dp
-                )
+                .padding(horizontal = if (selected) 14.dp else 12.dp, vertical = 7.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(6.dp)
         ) {
+            if (selected) {
+                Box(
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(999.dp))
+                        .background(BrandPrimary)
+                        .padding(horizontal = 5.dp, vertical = 2.dp)
+                ) {
+                    Text(
+                        text = "当前",
+                        color = Color.White,
+                        fontSize = 9.sp,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
+            }
+
             Text(
                 text = text.ifBlank { "未命名分类" },
-                color = if (selected) BrandPrimary else AppTextPrimary,
-                fontSize = 13.sp,
+                color = if (selected) Color.White else AppTextPrimary,
+                fontSize = 12.sp,
                 fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis
             )
         }
-    }
-}
-
-@Composable
-private fun HomeChip(text: String) {
-    TvSurface(onClick = {}) {
-        Text(
-            text = text,
-            color = Color.White,
-            fontSize = 11.sp,
-            modifier = Modifier.padding(horizontal = 8.dp, vertical = 6.dp)
-        )
     }
 }
 

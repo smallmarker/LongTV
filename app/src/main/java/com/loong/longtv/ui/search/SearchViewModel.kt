@@ -86,9 +86,9 @@ class SearchViewModel @Inject constructor(
             _searchResult.value = emptyMap()
             val grouped = linkedMapOf<String, List<Video>>()
             val allVideos = mutableListOf<Video>()
+            val enabledSites = siteRepository.getEnabledSites().filter { it.isSearchable() }
             supervisorScope {
-                val tasks = siteRepository.getEnabledSites()
-                    .filter { it.isSearchable() }
+                val tasks = enabledSites
                     .map { site ->
                         async {
                             Log.d("SearchViewModel", "search site: ${site.toJson()}")
@@ -106,7 +106,7 @@ class SearchViewModel @Inject constructor(
                 tasks.forEach { task ->
                     val (site, list) = task.await()
                     if (list.isEmpty()) return@forEach
-                    grouped[site.displayNameWithFamily()] = list
+                    grouped[site.displayName(enabledSites.size > 1)] = list
                     allVideos += list
                 }
             }
@@ -135,7 +135,7 @@ class SearchViewModel @Inject constructor(
 
             val siteTags = siteRepository.getEnabledSites()
                 .filter { it.isSearchable() }
-                .map { it.displayNameWithFamily() }
+                .map { it.displayName(showFamily = false) }
             if (siteTags.isNotEmpty()) {
                 add(
                     TagGroup(
@@ -149,6 +149,6 @@ class SearchViewModel @Inject constructor(
     }
 }
 
-private fun com.loong.longtv.data.bean.Site.displayNameWithFamily(): String {
-    return "[${spiderFamily().label}] $name"
+private fun com.loong.longtv.data.bean.Site.displayName(showFamily: Boolean): String {
+    return if (showFamily) "[${spiderFamily().label}] $name" else name
 }

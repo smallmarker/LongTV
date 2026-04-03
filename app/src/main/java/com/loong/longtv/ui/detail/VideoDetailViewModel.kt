@@ -98,6 +98,10 @@ class VideoDetailViewModel @Inject constructor(
                             error = null
                         )
                     }
+                    val playInfo = detail?.playInfos?.getOrNull(selectedSourceIndex)
+                    if (playInfo != null && playInfo.urlInfos.isNotEmpty()) {
+                        playEpisode(playInfo, selectedEpisodeIndex)
+                    }
                 }
 
                 is ApiResult.Error -> {
