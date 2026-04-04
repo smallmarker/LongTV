@@ -19,6 +19,9 @@ interface WatchHistoryDao {
     @Query("SELECT * FROM watch_history ORDER BY updateTime DESC LIMIT 50")
     fun recent(): Flow<List<WatchHistoryEntity>>
 
+    @Query("DELETE FROM watch_history WHERE historyKey IN (:historyKeys)")
+    suspend fun deleteByKeys(historyKeys: List<String>)
+
     @Query("DELETE FROM watch_history")
     suspend fun clearAll()
 }

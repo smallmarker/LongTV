@@ -1,7 +1,7 @@
 package com.loong.longtv
 
-import com.loong.longtv.ui.home.HomeScreen
 import android.Manifest
+import android.content.pm.ActivityInfo
 import android.os.Build
 import android.os.Bundle
 import androidx.activity.ComponentActivity
@@ -12,6 +12,9 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.tooling.preview.Preview
+import com.loong.longtv.nav.AppNavGraph
+import com.loong.longtv.ui.common.DeviceClass
+import com.loong.longtv.ui.common.currentDeviceClass
 import com.loong.longtv.ui.theme.LongTVTheme
 import dagger.hilt.android.AndroidEntryPoint
 
@@ -31,6 +34,7 @@ class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        applyDeviceOrientation()
         val permissions = buildRequiredPermissions()
         if (permissions.isEmpty()) {
             setMainContent()
@@ -46,6 +50,13 @@ class MainActivity : ComponentActivity() {
                     AppNavGraph()
                 }
             }
+        }
+    }
+
+    private fun applyDeviceOrientation() {
+        requestedOrientation = when (applicationContext.currentDeviceClass()) {
+            DeviceClass.PHONE -> ActivityInfo.SCREEN_ORIENTATION_USER_PORTRAIT
+            DeviceClass.TV -> ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE
         }
     }
 

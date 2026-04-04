@@ -1,5 +1,6 @@
 package com.loong.longtv.core.spider
 
+import com.google.gson.JsonParser
 import com.loong.longtv.data.bean.HomeContent
 import com.loong.longtv.data.bean.HomeTabItem
 import com.loong.longtv.data.bean.PlayerContent
@@ -95,6 +96,24 @@ class DDysSpider : PrivateHtmlSpider(DEFAULT_HOST) {
         return searchContent(key, quick, "1")
     }
 
+    override fun hotSearchContent(): String {
+        val response = getResponse("$host/api/hot-movies", referer = host)
+        val titles = runCatching {
+            JsonParser.parseString(response.body)
+                .asJsonObject
+                .get("data")
+                .asJsonArray
+                .mapNotNull { element ->
+                    element.asJsonObject
+                        .get("title")
+                        ?.asString
+                        ?.trim()
+                        ?.takeIf(String::isNotBlank)
+                }
+        }.getOrDefault(emptyList())
+        return gson.toJson(titles)
+    }
+
     override fun searchContent(key: String?, quick: Boolean, pg: String?): String {
         val keyword = key.orEmpty().trim()
         if (keyword.isBlank()) return gson.toJson(pageOf(emptyList(), 1, 1))
@@ -137,7 +156,12 @@ class DDysSpider : PrivateHtmlSpider(DEFAULT_HOST) {
                 val href = anchor.absUrl("href")
                 if (href.isBlank()) return@mapNotNull null
                 val image = anchor.selectFirst("img[src]")?.absUrl("src").orEmpty()
-                val title = anchor.text().trim().ifBlank { anchor.selectFirst("img")?.attr("alt").orEmpty() }
+                val title = anchor
+                    .selectFirst("h1, h2, h3, h4, .entry-title, .post-title")
+                    ?.text()
+                    ?.trim()
+                    .orEmpty()
+                    .ifBlank { anchor.selectFirst("img")?.attr("alt").orEmpty().trim() }
                 if (title.isBlank()) return@mapNotNull null
                 Video(
                     vod_id = href,
@@ -156,7 +180,8 @@ class DDysSpider : PrivateHtmlSpider(DEFAULT_HOST) {
                     vod_state = "",
                     vod_tag = "",
                     vod_time = "",
-                    vod_year = ""
+                    vod_year = "",
+                    vod_score = extractScore(anchor.text())
                 )
             }
             .distinctBy { it.vod_id }
@@ -176,12 +201,16 @@ class DDysSpider : PrivateHtmlSpider(DEFAULT_HOST) {
 
     private fun parseCardList(document: Document, categoryId: String = ""): List<Video> {
         return document.select(".movie-card").mapNotNull { card ->
-            val link = card.selectFirst("h3 a[href], a[href]") ?: return@mapNotNull null
+            val titleLink = card.selectFirst("h1 a[href], h2 a[href], h3 a[href], h4 a[href]")
+            val fallbackLink = card.select("a[href]").lastOrNull()
+            val link = titleLink ?: fallbackLink ?: return@mapNotNull null
             val href = link.absUrl("href")
-            val title = link.text().trim()
+            val title = titleLink?.text()?.trim().orEmpty()
+                .ifBlank { link.selectFirst("img")?.attr("alt").orEmpty().trim() }
             if (href.isBlank() || title.isBlank()) return@mapNotNull null
             val typeId = if (categoryId.isBlank()) findCategoryId(href) else categoryId
             val remarks = card.selectFirst(".text-xs.text-gray-500")?.text().orEmpty()
+            val cardText = card.text()
             Video(
                 vod_id = href,
                 vod_name = title,
@@ -199,7 +228,8 @@ class DDysSpider : PrivateHtmlSpider(DEFAULT_HOST) {
                 vod_state = "",
                 vod_tag = "",
                 vod_time = "",
-                vod_year = extractYear(remarks)
+                vod_year = extractYear(remarks),
+                vod_score = extractScore(cardText)
             )
         }
     }
@@ -278,6 +308,16 @@ class DDysSpider : PrivateHtmlSpider(DEFAULT_HOST) {
 
     private fun extractYear(text: String): String {
         return Regex("(19|20)\\d{2}").find(text)?.value.orEmpty()
+    }
+
+    private fun extractScore(text: String): String {
+        return Regex("(?<!\\d)(?:10(?:\\.0)?|[1-9](?:\\.\\d)?)(?!\\d)")
+            .findAll(text)
+            .map { it.value }
+            .firstOrNull { value ->
+                value.contains('.') || value.toIntOrNull() in 1..10
+            }
+            .orEmpty()
     }
 
     companion object {

@@ -57,6 +57,8 @@ data class Video(
     val vod_time: String,
     // 年份
     val vod_year: String,
+    // 评分
+    val vod_score: String = "",
 ) {
     // 视频来源
     var key = ""

@@ -242,7 +242,8 @@ open class AppRJSpider(
             vod_state = readString(obj, "vod_state", "state"),
             vod_tag = readString(obj, "vod_tag", "tag"),
             vod_time = readString(obj, "vod_time", "time"),
-            vod_year = readString(obj, "vod_year", "year")
+            vod_year = readString(obj, "vod_year", "year"),
+            vod_score = readString(obj, "vod_score", "score", "vod_douban_score", "douban_score", "rating")
         )
     }
 

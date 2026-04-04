@@ -10,6 +10,7 @@ interface WatchHistoryRepository {
     suspend fun save(history: WatchHistoryEntity)
     suspend fun find(siteKey: String, videoId: String): WatchHistoryEntity?
     fun recent(): Flow<List<WatchHistoryEntity>>
+    suspend fun delete(historyKeys: List<String>)
     suspend fun clear()
 }
 
@@ -27,6 +28,11 @@ class WatchHistoryRepositoryImpl @Inject constructor(
     }
 
     override fun recent(): Flow<List<WatchHistoryEntity>> = dao.recent()
+
+    override suspend fun delete(historyKeys: List<String>) {
+        if (historyKeys.isEmpty()) return
+        dao.deleteByKeys(historyKeys)
+    }
 
     override suspend fun clear() {
         dao.clearAll()

@@ -1,30 +1,38 @@
 package com.loong.longtv.ui.common
 
+import android.app.UiModeManager
+import android.content.Context
+import android.content.pm.PackageManager
+import android.content.res.Configuration
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.platform.LocalContext
 
 enum class DeviceClass {
     PHONE,
-    TABLET,
     TV
 }
 
-@Composable
-fun currentDeviceClass(): DeviceClass {
-    val configuration = LocalConfiguration.current
-    val width = configuration.screenWidthDp
-    return when {
-        width >= 900 -> DeviceClass.TV
-        width >= 600 -> DeviceClass.TABLET
-        else -> DeviceClass.PHONE
+fun Context.currentDeviceClass(): DeviceClass {
+    val uiModeManager = getSystemService(UiModeManager::class.java)
+    val isTvMode = uiModeManager?.currentModeType == Configuration.UI_MODE_TYPE_TELEVISION
+    val hasLeanbackFeature = packageManager.hasSystemFeature(PackageManager.FEATURE_LEANBACK)
+    return if (isTvMode || hasLeanbackFeature) {
+        DeviceClass.TV
+    } else {
+        DeviceClass.PHONE
     }
 }
 
 @Composable
-fun isPhoneScreen(): Boolean = currentDeviceClass() == DeviceClass.PHONE
+fun currentDeviceClass(): DeviceClass {
+    LocalConfiguration.current
+    val context = LocalContext.current
+    return context.currentDeviceClass()
+}
 
 @Composable
-fun isTabletScreen(): Boolean = currentDeviceClass() == DeviceClass.TABLET
+fun isPhoneScreen(): Boolean = currentDeviceClass() == DeviceClass.PHONE
 
 @Composable
 fun isTvScreen(): Boolean = currentDeviceClass() == DeviceClass.TV

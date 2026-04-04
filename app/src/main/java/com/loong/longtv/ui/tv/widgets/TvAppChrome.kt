@@ -1,0 +1,187 @@
+package com.loong.longtv.ui.tv.widgets
+
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ColumnScope
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.runtime.Composable
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import androidx.tv.material3.Text
+import com.loong.longtv.ui.theme.AppBackground
+import com.loong.longtv.ui.theme.AppBackgroundElevated
+import com.loong.longtv.ui.theme.AppCardOverlay
+import com.loong.longtv.ui.theme.AppTextPrimary
+import com.loong.longtv.ui.theme.AppTextSecondary
+import com.loong.longtv.ui.theme.BrandAccent
+import com.loong.longtv.ui.theme.BrandPrimary
+import com.loong.longtv.ui.theme.BrandSecondary
+
+@Composable
+fun TvAppPageScaffold(
+    modifier: Modifier = Modifier,
+    content: @Composable ColumnScope.() -> Unit
+) {
+    AppPageScaffoldBase(
+        modifier = modifier,
+        horizontalPadding = 24.dp,
+        verticalPadding = 20.dp,
+        content = content
+    )
+}
+
+@Composable
+fun TvAppPageHeader(
+    title: String,
+    subtitle: String,
+    modifier: Modifier = Modifier,
+    trailing: (@Composable () -> Unit)? = null
+) {
+    AppPageHeaderBase(
+        title = title,
+        subtitle = subtitle,
+        modifier = modifier,
+        titleSize = 28.sp,
+        horizontalPadding = 22.dp,
+        verticalPadding = 18.dp,
+        subtitleFontSize = 14.sp,
+        subtitleLineHeight = 20.sp,
+        subtitleMaxLines = 4,
+        trailing = trailing
+    )
+}
+
+@Composable
+private fun AppPageScaffoldBase(
+    modifier: Modifier,
+    horizontalPadding: androidx.compose.ui.unit.Dp,
+    verticalPadding: androidx.compose.ui.unit.Dp,
+    content: @Composable ColumnScope.() -> Unit
+) {
+    Box(
+        modifier = modifier
+            .fillMaxSize()
+            .background(
+                brush = Brush.verticalGradient(
+                    colors = listOf(
+                        AppBackground,
+                        AppBackgroundElevated,
+                        AppBackground
+                    )
+                )
+            )
+    ) {
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(280.dp)
+                .background(
+                    Brush.radialGradient(
+                        colors = listOf(
+                            BrandSecondary.copy(alpha = 0.24f),
+                            Color.Transparent
+                        )
+                    )
+                )
+        )
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(360.dp)
+                .background(
+                    Brush.horizontalGradient(
+                        colors = listOf(
+                            BrandAccent.copy(alpha = 0.16f),
+                            Color.Transparent,
+                            BrandPrimary.copy(alpha = 0.12f)
+                        )
+                    )
+                )
+        )
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(horizontal = horizontalPadding, vertical = verticalPadding),
+            content = content
+        )
+    }
+}
+
+@Composable
+private fun AppPageHeaderBase(
+    title: String,
+    subtitle: String,
+    modifier: Modifier,
+    titleSize: androidx.compose.ui.unit.TextUnit,
+    horizontalPadding: androidx.compose.ui.unit.Dp,
+    verticalPadding: androidx.compose.ui.unit.Dp,
+    subtitleFontSize: androidx.compose.ui.unit.TextUnit,
+    subtitleLineHeight: androidx.compose.ui.unit.TextUnit,
+    subtitleMaxLines: Int,
+    trailing: (@Composable () -> Unit)?
+) {
+    Row(
+        modifier = modifier
+            .fillMaxWidth()
+            .background(
+                color = AppCardOverlay,
+                shape = RoundedCornerShape(24.dp)
+            )
+            .padding(horizontal = horizontalPadding, vertical = verticalPadding),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Column(modifier = Modifier.weight(1f)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Box(
+                    modifier = Modifier
+                        .size(10.dp)
+                        .background(BrandPrimary, RoundedCornerShape(999.dp))
+                )
+                Spacer(modifier = Modifier.width(8.dp))
+                Text(
+                    text = "LongTV",
+                    color = AppTextSecondary,
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.Medium
+                )
+            }
+            Text(
+                text = title,
+                color = AppTextPrimary,
+                fontSize = titleSize,
+                fontWeight = FontWeight.Bold,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.padding(top = 10.dp)
+            )
+            Text(
+                text = subtitle,
+                color = AppTextSecondary,
+                fontSize = subtitleFontSize,
+                lineHeight = subtitleLineHeight,
+                maxLines = subtitleMaxLines,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.padding(top = 8.dp)
+            )
+        }
+        if (trailing != null) {
+            Spacer(modifier = Modifier.width(20.dp))
+            trailing()
+        }
+    }
+}
