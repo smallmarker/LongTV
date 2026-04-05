@@ -1,3 +1,8 @@
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
+import java.util.Properties
+
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.android)
@@ -5,6 +10,17 @@ plugins {
     alias(libs.plugins.dagger.hilt.android)
     kotlin("kapt")
 }
+
+val keystoreProperties = Properties().apply {
+    val keystorePropertiesFile = rootProject.file("key.properties")
+    if (keystorePropertiesFile.exists()) {
+        keystorePropertiesFile.inputStream().use(::load)
+    }
+}
+val apkBaseName = "LongTV"
+val apkVersionName = "1.0"
+val apkTimestamp: String
+    get() = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.getDefault()).format(Date())
 
 android {
     namespace = "com.loong.longtv"
@@ -19,9 +35,22 @@ android {
 
     }
 
+    signingConfigs {
+        if (keystoreProperties.isNotEmpty()) {
+            create("release") {
+                storeFile = rootProject.file(keystoreProperties.getProperty("storeFile"))
+                storePassword = keystoreProperties.getProperty("storePassword")
+                keyAlias = keystoreProperties.getProperty("keyAlias")
+                keyPassword = keystoreProperties.getProperty("keyPassword")
+            }
+        }
+    }
+
     buildTypes {
         release {
-            isMinifyEnabled = false
+            isMinifyEnabled = true
+            isShrinkResources = true
+            signingConfig = signingConfigs.findByName("release")
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
@@ -44,6 +73,29 @@ android {
             excludes += "META-INF/**"
         }
     }
+}
+
+val releaseApkDir = layout.buildDirectory.dir("outputs/apk/release")
+val renameReleaseApk = tasks.register("renameReleaseApk") {
+    dependsOn("assembleRelease")
+    doLast {
+        val apkDir = releaseApkDir.get().asFile
+        val sourceApk = apkDir.resolve("app-release.apk")
+        if (!sourceApk.exists()) return@doLast
+
+        apkDir.listFiles()
+            ?.filter { it.isFile && it.name.startsWith("${apkBaseName}_v") && it.extension == "apk" }
+            ?.forEach { it.delete() }
+
+        val targetApk = apkDir.resolve("${apkBaseName}_v${apkVersionName}_release_${apkTimestamp}.apk")
+        check(sourceApk.renameTo(targetApk)) {
+            "Failed to rename ${sourceApk.absolutePath} to ${targetApk.absolutePath}"
+        }
+    }
+}
+
+tasks.matching { it.name == "assembleRelease" }.configureEach {
+    finalizedBy(renameReleaseApk)
 }
 
 dependencies {
