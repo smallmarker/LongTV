@@ -32,6 +32,7 @@ android {
         targetSdk = 35
         versionCode = 1
         versionName = "1.0"
+        resourceConfigurations += listOf("zh", "en")
 
     }
 
@@ -101,9 +102,9 @@ tasks.matching { it.name == "assembleRelease" }.configureEach {
 dependencies {
     implementation(project(":spider"))
 
-    implementation(libs.junit)
-    implementation(libs.androidx.junit)
-    implementation(libs.androidx.espresso.core)
+    testImplementation(libs.junit)
+    androidTestImplementation(libs.androidx.junit)
+    androidTestImplementation(libs.androidx.espresso.core)
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.appcompat)
     implementation(platform(libs.androidx.compose.bom))
