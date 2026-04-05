@@ -56,7 +56,7 @@ class DDysSpider : PrivateHtmlSpider(DEFAULT_HOST) {
             val sourceUrl = extractSwitchSourceUrl(button.attr("onclick"))
             if (sourceUrl.isNotBlank()) {
                 playFrom += sourceName
-                playUrls += "播放$$sourceUrl"
+                playUrls += formatPlayUrl(sourceUrl)
             }
         }
 
@@ -268,6 +268,10 @@ class DDysSpider : PrivateHtmlSpider(DEFAULT_HOST) {
     private fun extractSwitchSourceUrl(onClick: String): String {
         val matcher = SWITCH_SOURCE_PATTERN.matcher(onClick)
         return if (matcher.find()) matcher.group(1).orEmpty() else ""
+    }
+
+    private fun formatPlayUrl(raw: String): String {
+        return if (raw.contains('$')) raw else "播放$$raw"
     }
 
     private fun labelValue(document: Document, label: String): String {

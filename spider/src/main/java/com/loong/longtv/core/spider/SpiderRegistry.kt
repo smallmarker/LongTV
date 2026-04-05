@@ -9,11 +9,13 @@ import javax.inject.Singleton
 class SpiderRegistry @Inject constructor() {
 
     private val siteFactories: Map<String, (Site) -> Spider> = mapOf(
-        "ddys" to { DDysSpider() }
+        "ddys" to { DDysSpider() },
+        "dyrs" to { DyrsSpider() }
     )
 
     private val apiFactories: Map<String, (Site) -> Spider> = mapOf(
-        "native_ddys" to { DDysSpider() }
+        "native_ddys" to { DDysSpider() },
+        "native_dyrs" to { DyrsSpider() }
     )
 
     fun create(site: Site): Spider? {

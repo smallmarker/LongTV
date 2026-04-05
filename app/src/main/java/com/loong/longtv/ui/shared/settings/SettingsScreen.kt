@@ -555,11 +555,11 @@ internal fun AccentPill(
                 shape = RoundedCornerShape(999.dp)
             )
             .padding(horizontal = 10.dp, vertical = 6.dp),
-        horizontalArrangement = Arrangement.spacedBy(6.dp)
+        horizontalArrangement = Arrangement.spacedBy(6.dp),
+        verticalAlignment = androidx.compose.ui.Alignment.CenterVertically
     ) {
         Box(
             modifier = Modifier
-                .padding(top = 3.dp)
                 .size(6.dp)
                 .clip(RoundedCornerShape(999.dp))
                 .background(accent)

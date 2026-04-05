@@ -35,7 +35,7 @@ enum class SpiderFamily(val label: String) {
 
 fun Site.spiderFamily(): SpiderFamily {
     return when {
-        api == "native_ddys" || key == "ddys" -> SpiderFamily.PRIVATE
+        api in setOf("native_ddys", "native_dyrs") || key in setOf("ddys", "dyrs") -> SpiderFamily.PRIVATE
         api == "local" -> SpiderFamily.LOCAL
         api == "native_app_v2" || key == "app_v2_template" -> SpiderFamily.APP_V2
         api == "native_meipa" -> SpiderFamily.APP_V2
