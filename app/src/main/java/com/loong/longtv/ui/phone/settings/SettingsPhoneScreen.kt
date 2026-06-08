@@ -44,8 +44,7 @@ fun SettingsPhoneScreen(
             state = state,
             compact = true,
             phoneLayout = true,
-            onDefault = viewModel::setDefaultSite,
-            onToggle = viewModel::toggleSite
+            onSwitchSource = viewModel::switchSource
         )
     }
 }

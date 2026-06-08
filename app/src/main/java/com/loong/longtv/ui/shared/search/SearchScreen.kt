@@ -48,7 +48,7 @@ import androidx.tv.material3.ExperimentalTvMaterial3Api
 import androidx.tv.material3.Icon
 import androidx.tv.material3.Text
 import com.loong.longtv.nav.Screen
-import com.loong.longtv.data.bean.TagGroup
+import com.loong.longtv.ui.shared.search.TagGroup
 import com.loong.longtv.ui.shared.search.SearchViewModel
 import com.loong.longtv.ui.theme.AppSurface
 import com.loong.longtv.ui.theme.AppSurfaceVariant

@@ -13,7 +13,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.tv.material3.Text
-import com.loong.longtv.data.bean.Site
+import com.loong.longtv.engine.source.model.SiteConfig
 import com.loong.longtv.ui.theme.AppTextPrimary
 import com.loong.longtv.ui.shared.widgets.TvSurface
 
@@ -50,7 +50,7 @@ fun TvChipTabs(
 
 @Composable
 fun TvSiteSelector(
-    sites: List<Site>,
+    sites: List<SiteConfig>,
     currentSiteKey: String?,
     onSelect: (String) -> Unit,
     modifier: Modifier = Modifier

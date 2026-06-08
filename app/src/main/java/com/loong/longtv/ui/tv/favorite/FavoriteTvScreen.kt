@@ -46,11 +46,9 @@ import androidx.lifecycle.viewModelScope
 import androidx.navigation.NavController
 import androidx.tv.material3.ClickableSurfaceDefaults
 import androidx.tv.material3.Text
-import com.loong.longtv.data.bean.Video
 import com.loong.longtv.data.room.entity.FavoriteEntity
-import com.loong.longtv.data.repository.ApiResult
-import com.loong.longtv.data.repository.SpiderRepository
-import com.loong.longtv.data.site.SiteRepository
+import com.loong.longtv.engine.TvBoxEngine
+import com.loong.longtv.engine.source.model.VodInfo
 import com.loong.longtv.nav.Screen
 import com.loong.longtv.ui.shared.favorite.FavoriteViewModel
 import com.loong.longtv.ui.shared.widgets.AppButton
@@ -882,8 +880,7 @@ data class FavoriteTvCardMeta(
 
 @HiltViewModel
 class FavoriteTvDetailViewModel @Inject constructor(
-    private val siteRepository: SiteRepository,
-    private val spiderRepository: SpiderRepository
+    private val engine: TvBoxEngine
 ) : ViewModel() {
 
     private val _detailMap = MutableStateFlow<Map<String, FavoriteTvCardMeta>>(emptyMap())
@@ -902,24 +899,21 @@ class FavoriteTvDetailViewModel @Inject constructor(
     }
 
     private suspend fun loadDetailMeta(item: FavoriteEntity): FavoriteTvCardMeta {
-        val site = siteRepository.getSite(item.siteKey) ?: return FavoriteTvCardMeta()
-        return when (val result = spiderRepository.detailContent(site, listOf(item.videoId))) {
-            is ApiResult.Success -> result.data.toCardMeta()
-            else -> FavoriteTvCardMeta()
-        }
+        val site = engine.currentConfig?.sites?.find { it.key == item.siteKey } ?: return FavoriteTvCardMeta()
+        return engine.sourceRepository.getDetail(site, item.videoId)
+            .getOrNull()?.toCardMeta() ?: FavoriteTvCardMeta()
     }
 }
 
-private fun Video?.toCardMeta(): FavoriteTvCardMeta {
-    val detail = this ?: return FavoriteTvCardMeta()
-    val score = detail.vod_score.trim().toDoubleOrNull()?.takeIf { it > 0.0 }
-    val episodeCount = detail.playInfos.maxOfOrNull { it.urlInfos.size }?.takeIf { it > 0 }
+private fun VodInfo.toCardMeta(): FavoriteTvCardMeta {
+    val score = this.score.trim().toDoubleOrNull()?.takeIf { it > 0.0 }
+    val episodeCount = getPlayLines().maxOfOrNull { it.episodes.size }?.takeIf { it > 0 }
     val scoreEpisodeLine = buildList {
-        score?.let { add("⭐ ${"%.1f".format(Locale.US, it)}") }
+        score?.let { add("⭐ ${"%.1f".format(java.util.Locale.US, it)}") }
         episodeCount?.let { add("${it}集") }
     }.takeIf { it.isNotEmpty() }?.joinToString(" · ")
-    val remarkLine = detail.vod_remarks.trim().ifBlank {
-        listOf(detail.type_name.trim(), detail.vod_year.trim())
+    val remarkLine = remarks.trim().ifBlank {
+        listOf(typeName.trim(), year.trim())
             .filter { it.isNotBlank() }
             .joinToString(" · ")
     }.ifBlank { null }

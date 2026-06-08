@@ -69,9 +69,9 @@ import androidx.tv.material3.ClickableSurfaceDefaults
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
 import com.loong.longtv.nav.Screen
-import com.loong.longtv.data.bean.PlayInfo
-import com.loong.longtv.data.bean.UrlInfo
-import com.loong.longtv.data.player.PlayableMedia
+import com.loong.longtv.engine.source.model.PlayLine
+import com.loong.longtv.engine.source.model.Episode
+import com.loong.longtv.engine.player.PlayableMedia
 import com.loong.longtv.ui.theme.AppCardOverlay
 import com.loong.longtv.ui.theme.AppBackground
 import com.loong.longtv.ui.theme.AppBackgroundElevated
@@ -103,9 +103,9 @@ internal fun VideoDetailRouteContent(
     viewModel: VideoDetailViewModel,
     content: @Composable (
         state: VideoDetailUiState,
-        detail: com.loong.longtv.data.bean.Video,
-        sources: List<PlayInfo>,
-        selectedSource: PlayInfo?,
+        detail: com.loong.longtv.engine.source.model.VodInfo,
+        sources: List<PlayLine>,
+        selectedSource: PlayLine?,
         playableMedia: PlayableMedia?,
         onOpenFullscreen: (PlayableMedia, String) -> Unit,
         onProgressChanged: (Long, Long) -> Unit,
@@ -114,7 +114,7 @@ internal fun VideoDetailRouteContent(
         onRetryCurrent: () -> Unit,
         onClearError: () -> Unit,
         onSelectSource: (Int) -> Unit,
-        onSelectEpisode: (PlayInfo, Int) -> Unit
+        onSelectEpisode: (PlayLine, Int) -> Unit
     ) -> Unit
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
@@ -126,14 +126,14 @@ internal fun VideoDetailRouteContent(
         navigator.navigate(
             Screen.FullscreenPlayer.createRoute(
                 title = buildString {
-                    append(state.detail?.vod_name?.ifBlank { "全屏播放" } ?: "全屏播放")
+                    append(state.detail?.name?.ifBlank { "全屏播放" } ?: "全屏播放")
                     if (episodeName.isNotBlank()) append(" - ").append(episodeName)
                 },
                 url = playableMedia.url,
                 headers = playableMedia.headers,
                 position = state.resumePositionMs,
                 episodeIndex = state.selectedEpisodeIndex,
-                episodeCount = state.detail?.playInfos?.getOrNull(state.selectedSourceIndex)?.urlInfos?.size ?: 0
+                episodeCount = state.detail?.getPlayLines()?.getOrNull(state.selectedSourceIndex)?.episodes?.size ?: 0
             )
         )
     }
@@ -150,19 +150,19 @@ internal fun VideoDetailRouteContent(
     LaunchedEffect(currentBackStackEntry, state.detail, state.selectedSourceIndex) {
         val targetIndex = savedStateHandle?.remove<Int>("fullscreen_target_episode_index") ?: return@LaunchedEffect
         reopenFullscreenAfterSwitch = savedStateHandle?.remove<Boolean>("fullscreen_reenter") == true
-        val playInfo = state.detail?.playInfos?.getOrNull(state.selectedSourceIndex) ?: return@LaunchedEffect
-        if (targetIndex in playInfo.urlInfos.indices) {
+        val playInfo = state.detail?.getPlayLines()?.getOrNull(state.selectedSourceIndex) ?: return@LaunchedEffect
+        if (targetIndex in playInfo.episodes.indices) {
             viewModel.playEpisode(playInfo, targetIndex)
         }
     }
 
     LaunchedEffect(state.playableMedia, reopenFullscreenAfterSwitch, state.selectedEpisodeIndex) {
         val playableMedia = state.playableMedia ?: return@LaunchedEffect
-        if (!reopenFullscreenAfterSwitch || playableMedia.requiresParse || playableMedia.url.isBlank()) return@LaunchedEffect
+        if (!reopenFullscreenAfterSwitch || playableMedia.needsParse() || playableMedia.url.isBlank()) return@LaunchedEffect
         val episodeName = state.detail
-            ?.playInfos
+            ?.getPlayLines()
             ?.getOrNull(state.selectedSourceIndex)
-            ?.urlInfos
+            ?.episodes
             ?.getOrNull(state.selectedEpisodeIndex)
             ?.name
             .orEmpty()
@@ -181,7 +181,7 @@ internal fun VideoDetailRouteContent(
 
         else -> {
             val detail = state.detail ?: return
-            val sources = detail.playInfos
+            val sources = detail.getPlayLines()
             val selectedSource = sources.getOrNull(state.selectedSourceIndex)
             val playableMedia = state.playableMedia
             val onPlayCurrent = {
@@ -212,10 +212,10 @@ internal fun VideoDetailRouteContent(
 @Composable
 internal fun DetailPreviewBlock(
     modifier: Modifier = Modifier,
-    detail: com.loong.longtv.data.bean.Video,
+    detail: com.loong.longtv.engine.source.model.VodInfo,
     playableMedia: PlayableMedia?,
     resumePositionMs: Long,
-    selectedSource: PlayInfo?,
+    selectedSource: PlayLine?,
     selectedEpisodeIndex: Int,
     onBack: () -> Unit,
     onOpenFullscreen: (PlayableMedia, String) -> Unit,
@@ -226,8 +226,8 @@ internal fun DetailPreviewBlock(
     val activity = context.findActivity()
     val haptic = LocalHapticFeedback.current
     val controlState = rememberPlayerControlState()
-    val title = detail.vod_name.safeText("未命名视频")
-    val episodeName = selectedSource?.urlInfos?.getOrNull(selectedEpisodeIndex)?.name.orEmpty()
+    val title = detail.name.safeText("未命名视频")
+    val episodeName = selectedSource?.episodes?.getOrNull(selectedEpisodeIndex)?.name.orEmpty()
     val topBarTitle = buildString {
         append(title)
         if (episodeName.isNotBlank()) append(" · ").append(episodeName)
@@ -364,7 +364,7 @@ internal fun DetailPreviewBlock(
         modifier = modifier
             .background(AppCardOverlay)
     ) {
-        if (playableMedia?.url?.isNotBlank() == true && !playableMedia.requiresParse) {
+        if (playableMedia?.url?.isNotBlank() == true && !playableMedia.needsParse()) {
             VideoPlayerView(
                 modifier = Modifier.fillMaxSize(),
                 videoUrl = playableMedia.url,
@@ -390,7 +390,7 @@ internal fun DetailPreviewBlock(
             )
         } else {
             SmartAsyncImage(
-                model = detail.vod_pic,
+                model = detail.pic,
                 contentDescription = title,
                 modifier = Modifier
                     .fillMaxSize()
@@ -400,7 +400,7 @@ internal fun DetailPreviewBlock(
             )
         }
 
-        if (playableMedia?.url?.isNotBlank() == true && !playableMedia.requiresParse) {
+        if (playableMedia?.url?.isNotBlank() == true && !playableMedia.needsParse()) {
             PhoneFullscreenGestureLayer(
                 modifier = Modifier.matchParentSize(),
                 durationMs = durationMs,
@@ -495,7 +495,7 @@ internal fun DetailPreviewBlock(
                 Text(
                     text = when {
                         playableMedia == null -> "--:--"
-                        playableMedia.requiresParse -> "--:--"
+                        playableMedia.needsParse() -> "--:--"
                         else -> formatPlayerTime(if (isScrubbing) scrubPositionMs else currentPositionMs)
                     },
                     color = AppTextMuted,
@@ -523,7 +523,7 @@ internal fun DetailPreviewBlock(
                 Text(
                     text = when {
                         playableMedia == null -> "--:--"
-                        playableMedia.requiresParse -> "--:--"
+                        playableMedia.needsParse() -> "--:--"
                         durationMs > 0 -> formatPlayerTime(durationMs)
                         else -> "--:--"
                     },
@@ -531,7 +531,7 @@ internal fun DetailPreviewBlock(
                     fontSize = 12.sp,
                     modifier = Modifier.padding(start = 10.dp)
                 )
-                if (playableMedia != null && !playableMedia.requiresParse && playableMedia.url.isNotBlank()) {
+                if (playableMedia != null && !playableMedia.needsParse() && playableMedia.url.isNotBlank()) {
                     FullscreenIconButton(
                         modifier = Modifier.padding(start = 10.dp),
                         onClick = { onOpenFullscreen(playableMedia, episodeName) }
@@ -580,8 +580,8 @@ private fun MiniPlayPauseIcon(
 internal fun DetailInfoBlock(
     navigator: NavController,
     state: VideoDetailUiState,
-    detail: com.loong.longtv.data.bean.Video,
-    selectedSource: PlayInfo?,
+    detail: com.loong.longtv.engine.source.model.VodInfo,
+    selectedSource: PlayLine?,
     playableMedia: PlayableMedia?,
     resumePositionMs: Long,
     phoneLayout: Boolean,
@@ -591,12 +591,12 @@ internal fun DetailInfoBlock(
     onClearError: () -> Unit,
     modifier: Modifier = Modifier
 ) {
-    val title = detail.vod_name.safeText("未命名视频")
-    val typeName = detail.type_name.safeText()
-    val year = detail.vod_year.safeText()
-    val area = detail.vod_area.safeText()
-    val remarks = detail.vod_remarks.safeText()
-    val content = detail.vod_content.safeText("暂无简介\nID: ${detail.vod_id.safeText()}")
+    val title = detail.name.safeText("未命名视频")
+    val typeName = detail.typeName.safeText()
+    val year = detail.year.safeText()
+    val area = detail.area.safeText()
+    val remarks = detail.remarks.safeText()
+    val content = detail.content.safeText("暂无简介\nID: ${detail.id.safeText()}")
     var showFullDescription by remember(title, content) { mutableStateOf(false) }
 
     if (phoneLayout) {
@@ -709,14 +709,14 @@ internal fun DetailInfoBlock(
                     text = if (state.favorite) "取消收藏" else "收藏",
                     onClick = onToggleFavorite
                 )
-                if (selectedSource != null && playableMedia == null && selectedSource.urlInfos.isNotEmpty()) {
+                if (selectedSource != null && playableMedia == null && selectedSource.episodes.isNotEmpty()) {
                     TvDetailActionButton(
                         text = if (resumePositionMs > 0) "继续观看" else "播放当前集",
                         onClick = onPlayCurrent,
                         prominent = true
                     )
                 }
-                if (playableMedia != null && !playableMedia.requiresParse && playableMedia.url.isNotBlank()) {
+                if (playableMedia != null && !playableMedia.needsParse() && playableMedia.url.isNotBlank()) {
                     TvDetailActionButton(text = "重新获取片源", onClick = onRetryCurrent)
                 }
             }
@@ -728,7 +728,7 @@ internal fun DetailInfoBlock(
             if (state.error != null) {
                 Spacer(modifier = Modifier.height(12.dp))
                 Text(text = state.error ?: "", color = AppError, fontSize = 13.sp)
-                if (selectedSource != null && selectedSource.urlInfos.isNotEmpty()) {
+                if (selectedSource != null && selectedSource.episodes.isNotEmpty()) {
                     Spacer(modifier = Modifier.height(12.dp))
                     FlowRow(
                         horizontalArrangement = Arrangement.spacedBy(12.dp),
@@ -1038,21 +1038,21 @@ private fun DetailChip(text: String) {
 @Composable
 @OptIn(ExperimentalLayoutApi::class)
 private fun PhonePlaybackSummaryCard(
-    selectedSource: PlayInfo?,
+    selectedSource: PlayLine?,
     selectedEpisodeIndex: Int,
     playableMedia: PlayableMedia?,
     resumePositionMs: Long
 ) {
-    val episodeName = selectedSource?.urlInfos?.getOrNull(selectedEpisodeIndex)?.name.orEmpty()
+    val episodeName = selectedSource?.episodes?.getOrNull(selectedEpisodeIndex)?.name.orEmpty()
     val statusLabel = when {
         playableMedia == null -> "待加载"
-        playableMedia.requiresParse -> "需换源"
+        playableMedia.needsParse() -> "需换源"
         playableMedia.url.isBlank() -> "未就绪"
         else -> "可播放"
     }
     val statusColor = when {
         playableMedia == null -> AppTextMuted
-        playableMedia.requiresParse -> BrandAccent
+        playableMedia.needsParse() -> BrandAccent
         playableMedia.url.isBlank() -> AppTextSecondary
         else -> BrandSecondary
     }
@@ -1115,12 +1115,10 @@ private fun PhonePlaybackSummaryCard(
             verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
             if (selectedSource != null) {
-                DetailChip(text = "共 ${selectedSource.urlInfos.size} 集")
+                DetailChip(text = "共 ${selectedSource.episodes.size} 集")
             }
-            if (playableMedia != null && playableMedia.resolutionNote.isNotBlank()) {
-                DetailChip(text = playableMedia.resolutionNote)
-            } else if (playableMedia != null) {
-                DetailChip(text = playableMedia.resolutionType.label)
+            if (playableMedia != null) {
+                DetailChip(text = playableMedia.type.label)
             }
         }
     }
@@ -1129,14 +1127,14 @@ private fun PhonePlaybackSummaryCard(
 @Composable
 private fun PhoneDetailActionGroup(
     favorite: Boolean,
-    selectedSource: PlayInfo?,
+    selectedSource: PlayLine?,
     playableMedia: PlayableMedia?,
     error: String?,
     onToggleFavorite: () -> Unit,
     onRetryCurrent: () -> Unit,
     onClearError: () -> Unit
 ) {
-    val canPlay = selectedSource != null && selectedSource.urlInfos.isNotEmpty()
+    val canPlay = selectedSource != null && selectedSource.episodes.isNotEmpty()
     val showRefresh = playableMedia != null
 
     Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -1223,15 +1221,15 @@ private fun PhoneDetailActionButton(
 @Composable
 private fun PlaybackDecisionCard(
     playableMedia: PlayableMedia?,
-    selectedSource: PlayInfo?,
+    selectedSource: PlayLine?,
     selectedEpisodeIndex: Int,
     resumePositionMs: Long,
     phoneLayout: Boolean
 ) {
-    val episodeName = selectedSource?.urlInfos?.getOrNull(selectedEpisodeIndex)?.name.orEmpty()
+    val episodeName = selectedSource?.episodes?.getOrNull(selectedEpisodeIndex)?.name.orEmpty()
     val decisionText = when {
         playableMedia == null -> "选定线路后可直接预览，适合先试播再进全屏。"
-        playableMedia.requiresParse -> "当前线路返回的是中转页，建议优先切换其他线路。"
+        playableMedia.needsParse() -> "当前线路返回的是中转页，建议优先切换其他线路。"
         resumePositionMs > 0 -> "已保存上次进度，适合直接继续观看。"
         else -> "当前片源已可直播，适合直接进入全屏沉浸观看。"
     }
@@ -1310,7 +1308,7 @@ private tailrec fun Context.findActivity(): android.app.Activity? = when (this) 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun CurrentPlaybackInfo(
-    selectedSource: PlayInfo?,
+    selectedSource: PlayLine?,
     playableMedia: PlayableMedia?,
     siteLabel: String,
     phoneLayout: Boolean
@@ -1323,13 +1321,10 @@ private fun CurrentPlaybackInfo(
             DetailChip(text = siteLabel)
         }
         if (selectedSource != null) {
-            DetailChip(text = "共 ${selectedSource.urlInfos.size} 集")
+            DetailChip(text = "共 ${selectedSource.episodes.size} 集")
         }
         if (phoneLayout && playableMedia != null) {
-            DetailChip(text = "播放: ${playableMedia.resolutionType.label}")
-            if (playableMedia.resolutionNote.isNotBlank()) {
-                DetailChip(text = playableMedia.resolutionNote)
-            }
+            DetailChip(text = "播放: ${playableMedia.type.label}")
         }
     }
 }
@@ -1344,7 +1339,7 @@ internal fun CenterMessage(message: String, color: Color) {
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 internal fun SourceRow(
-    sources: List<PlayInfo>,
+    sources: List<PlayLine>,
     selectedIndex: Int,
     onSelect: (Int) -> Unit,
     phoneLayout: Boolean
@@ -1386,11 +1381,11 @@ internal fun SourceRow(
 internal fun EpisodeGrid(
     compact: Boolean,
     phoneLayout: Boolean,
-    playInfo: PlayInfo?,
+    playInfo: PlayLine?,
     selectedIndex: Int,
-    onSelect: (PlayInfo, Int) -> Unit
+    onSelect: (PlayLine, Int) -> Unit
 ) {
-    val episodes = playInfo?.urlInfos.orEmpty()
+    val episodes = playInfo?.episodes.orEmpty()
     if (episodes.isEmpty()) {
         Text(text = "当前线路暂无可播放集数", color = AppTextMuted, fontSize = 14.sp)
         return
@@ -1455,7 +1450,7 @@ internal fun EpisodeGrid(
     }
 }
 
-private fun UrlInfo.displayLabel(index: Int): String {
+private fun Episode.displayLabel(index: Int): String {
     val raw = name.orEmpty().trim()
     val normalized = raw.lowercase()
     return when {

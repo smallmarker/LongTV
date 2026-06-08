@@ -55,7 +55,7 @@ internal fun SearchResultContent(
     categories: List<String>,
     selectedCategory: String?,
     resultCount: Int,
-    videos: List<com.loong.longtv.data.bean.Video>,
+    videos: List<com.loong.longtv.engine.source.model.VodInfo>,
     loading: Boolean,
     error: String?,
     compact: Boolean,
@@ -137,7 +137,7 @@ internal fun SearchResultContent(
 @Composable
 internal fun SearchResultGrid(
     modifier: Modifier,
-    videos: List<com.loong.longtv.data.bean.Video>,
+    videos: List<com.loong.longtv.engine.source.model.VodInfo>,
     navigator: NavController,
     phoneLayout: Boolean
 ) {
@@ -151,8 +151,8 @@ internal fun SearchResultGrid(
         items(videos) { video ->
             TvSurface(
                 onClick = {
-                    val siteKey = runCatching { video.key }.getOrNull().orEmpty()
-                    val videoId = runCatching { video.vod_id }.getOrNull().orEmpty()
+                    val siteKey = video.siteKey
+                    val videoId = video.id
                     if (siteKey.isNotBlank() && videoId.isNotBlank()) {
                         navigator.navigate(VideoDetail.createRoute(siteKey, videoId))
                     }

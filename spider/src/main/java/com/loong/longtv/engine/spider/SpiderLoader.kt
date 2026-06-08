@@ -27,6 +27,7 @@ import java.io.File
 class SpiderLoader(private val context: Context) {
 
     private var classLoader: ClassLoader? = null
+    private var guardLoader: ClassLoader? = null
     private var currentJarPath: String? = null
 
     /**
@@ -61,13 +62,25 @@ class SpiderLoader(private val context: Context) {
 
         classLoader = loader
         currentJarPath = jarFile.absolutePath
+        // cache the guardLoader resolved during initJarRuntime for createSpider fallback
+        guardLoader = resolveGuardLoader(loader)
         Log.i(TAG, "Jar loaded: ${jarFile.absolutePath}")
         return true
     }
 
     /**
+     * 获取已注入的 guard DexClassLoader（来自 Init.loader()）
+     */
+    private fun resolveGuardLoader(spiderLoader: ClassLoader): ClassLoader? {
+        return runCatching {
+            val initClass = spiderLoader.loadClass("com.github.catvod.spider.Init")
+            initClass.getMethod("loader").invoke(null) as? ClassLoader
+        }.getOrNull()
+    }
+
+    /**
      * 根据类名创建Spider实例
-     * @param className 短类名（如 "DouDouGuard"）
+     * @param className 短类名（如 "DouDouGuard" 或 "XPathGuard"）
      */
     fun createSpider(className: String): Spider? {
         val loader = classLoader ?: run {
@@ -84,13 +97,30 @@ class SpiderLoader(private val context: Context) {
         }
 
         val fullClassName = "$SPIDER_PACKAGE.$className"
-        return runCatching {
+
+        // 优先从 spider.jar 的 classloader 加载；对于只存在于 guard.dex 的类
+        // （如 XPathGuard），fallback 到 guardLoader。
+        val instance = runCatching {
             val clazz = loader.loadClass(fullClassName)
-            val instance = clazz.getDeclaredConstructor().newInstance()
-            instance as? Spider
-        }.onFailure {
-            Log.e(TAG, "Failed to create spider: $fullClassName", it)
-        }.getOrNull()
+            clazz.getDeclaredConstructor().newInstance()
+        }.getOrElse { e1 ->
+            if (e1 !is ClassNotFoundException) {
+                Log.e(TAG, "Failed to create spider: $fullClassName", e1)
+                return null
+            }
+            // ClassNotFoundException：尝试从 guard.dex classloader 加载
+            val gl = guardLoader ?: run {
+                Log.e(TAG, "Failed to create spider: $fullClassName (not in spider.jar, no guard loader)", e1)
+                return null
+            }
+            runCatching {
+                val clazz = gl.loadClass(fullClassName)
+                clazz.getDeclaredConstructor().newInstance()
+            }.onFailure {
+                Log.e(TAG, "Failed to create spider in guard loader: $fullClassName", it)
+            }.getOrNull()
+        }
+        return instance as? Spider
     }
 
     /**
@@ -177,6 +207,11 @@ class SpiderLoader(private val context: Context) {
     /**
      * 将 config.db 复制到 codeCacheDir，设为只读，创建 DexClassLoader，并通过反射
      * 注入到 JAR Init 单例的 DexClassLoader 字段，绕过 native 可写 dex 限制。
+     *
+     * 同时处理 guard.dex 内部可能包含独立的 com.github.catvod.Init 类问题：
+     * guard.dex 的 classloader 优先搜索自身 dex，因此 guard.dex 内的 Spider 类
+     * 调用 com.github.catvod.Init.context() 时拿到的是 guard.dex 自己的 Init，
+     * 其 application 字段为 null。修复方法：在 guardLoader 创建后主动对其 Init 设置 context。
      */
     private fun injectGuardLoader(initClass: Class<*>, spiderLoader: ClassLoader, configDb: File) {
         runCatching {
@@ -189,7 +224,7 @@ class SpiderLoader(private val context: Context) {
 
             // 创建 DexClassLoader，parent 为 spider.jar 的 ClassLoader
             val guardOptDir = File(context.codeCacheDir, "guard_opt").apply { mkdirs() }
-            val guardLoader = DexClassLoader(
+            val gl = DexClassLoader(
                 guardDex.absolutePath,
                 guardOptDir.absolutePath,
                 null,
@@ -204,13 +239,40 @@ class SpiderLoader(private val context: Context) {
             }?.apply { isAccessible = true }
 
             if (dexLoaderField != null) {
-                dexLoaderField.set(singleton, guardLoader)
+                dexLoaderField.set(singleton, gl)
                 Log.i(TAG, "Injected guard DexClassLoader into Init singleton - Init.loader() should now be non-null")
             } else {
                 Log.e(TAG, "DexClassLoader field not found in Init class - cannot inject guard loader")
             }
+
+            // guard.dex 内部可能有自己的 com.github.catvod.Init，其 application 字段
+            // 未被 App.onCreate() 设置，导致 guard.dex 的 Spider 调用 Init.context() 返回 null。
+            // 在 guardLoader 创建后立即对其设置 applicationContext。
+            initGuardContext(gl)
         }.onFailure {
             Log.e(TAG, "Failed to inject guard DexClassLoader: ${it.message}", it)
+        }
+    }
+
+    /**
+     * 对 guard.dex 内部的 com.github.catvod.Init 和 com.github.catvod.spider.InitOrigin
+     * （若存在）设置 applicationContext，防止 guard.dex 的 Spider 类调用
+     * Init.context() / InitOrigin.getSpStr() 时 context 为 null。
+     */
+    private fun initGuardContext(gl: ClassLoader) {
+        val app = context.applicationContext
+        val candidates = listOf("com.github.catvod.Init", "com.github.catvod.spider.InitOrigin")
+        for (className in candidates) {
+            runCatching {
+                val clazz = gl.loadClass(className)
+                val setMethod = clazz.methods.firstOrNull { m ->
+                    m.name == "set" && m.parameterTypes.size == 1
+                } ?: return@runCatching
+                setMethod.invoke(null, app)
+                Log.i(TAG, "Set applicationContext on guard.dex's $className via $setMethod")
+            }.onFailure {
+                Log.d(TAG, "guard.dex $className: ${it.message}")
+            }
         }
     }
 
@@ -218,6 +280,7 @@ class SpiderLoader(private val context: Context) {
 
     fun release() {
         classLoader = null
+        guardLoader = null
         currentJarPath = null
     }
 

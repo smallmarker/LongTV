@@ -18,8 +18,8 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.navigation.NavController
-import com.loong.longtv.data.bean.PlayInfo
-import com.loong.longtv.data.player.PlayableMedia
+import com.loong.longtv.engine.source.model.PlayLine
+import com.loong.longtv.engine.player.PlayableMedia
 import com.loong.longtv.ui.shared.detail.VideoDetailUiState
 import com.loong.longtv.ui.shared.detail.VideoDetailViewModel
 import com.loong.longtv.ui.shared.detail.DetailInfoBlock
@@ -67,9 +67,9 @@ fun VideoDetailPhoneScreen(
 internal fun VideoDetailPhoneContent(
     navigator: NavController,
     state: VideoDetailUiState,
-    detail: com.loong.longtv.data.bean.Video,
-    sources: List<PlayInfo>,
-    selectedSource: PlayInfo?,
+    detail: com.loong.longtv.engine.source.model.VodInfo,
+    sources: List<PlayLine>,
+    selectedSource: PlayLine?,
     playableMedia: PlayableMedia?,
     onOpenFullscreen: (PlayableMedia, String) -> Unit,
     onProgressChanged: (Long, Long) -> Unit,
@@ -78,7 +78,7 @@ internal fun VideoDetailPhoneContent(
     onRetryCurrent: () -> Unit,
     onClearError: () -> Unit,
     onSelectSource: (Int) -> Unit,
-    onSelectEpisode: (PlayInfo, Int) -> Unit
+    onSelectEpisode: (PlayLine, Int) -> Unit
 ) {
     Column(
         modifier = Modifier

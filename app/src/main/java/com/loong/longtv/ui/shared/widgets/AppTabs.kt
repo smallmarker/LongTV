@@ -2,7 +2,7 @@ package com.loong.longtv.ui.shared.widgets
 
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
-import com.loong.longtv.data.bean.Site
+import com.loong.longtv.engine.source.model.SiteConfig
 import com.loong.longtv.ui.common.DeviceClass
 import com.loong.longtv.ui.common.currentDeviceClass
 import com.loong.longtv.ui.phone.widgets.PhoneChipTabs
@@ -35,7 +35,7 @@ fun AdaptiveChipTabs(
 
 @Composable
 fun AdaptiveSiteSelector(
-    sites: List<Site>,
+    sites: List<SiteConfig>,
     currentSiteKey: String?,
     onSelect: (String) -> Unit,
     modifier: Modifier = Modifier

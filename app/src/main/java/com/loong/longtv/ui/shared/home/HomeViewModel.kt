@@ -6,13 +6,12 @@ import androidx.paging.Pager
 import androidx.paging.PagingConfig
 import androidx.paging.PagingData
 import androidx.paging.cachedIn
-import com.loong.longtv.data.bean.HomeContent
-import com.loong.longtv.data.bean.HomeTabItem
-import com.loong.longtv.data.bean.Site
-import com.loong.longtv.data.bean.Video
-import com.loong.longtv.data.repository.ApiResult
-import com.loong.longtv.data.repository.SpiderRepository
-import com.loong.longtv.data.site.SiteRepository
+import com.loong.longtv.di.DefaultSources
+import com.loong.longtv.engine.TvBoxEngine
+import com.loong.longtv.engine.source.model.Category
+import com.loong.longtv.engine.source.model.HomeContent
+import com.loong.longtv.engine.source.model.SiteConfig
+import com.loong.longtv.engine.source.model.VodInfo
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -25,32 +24,50 @@ import javax.inject.Inject
 
 @HiltViewModel
 class HomeViewModel @Inject constructor(
-    private val siteRepository: SiteRepository,
-    private val spiderRepository: SpiderRepository,
+    private val engine: TvBoxEngine,
 ) : ViewModel() {
-    private val pagerCache = mutableMapOf<String, Flow<PagingData<Video>>>()
+    private val pagerCache = mutableMapOf<String, Flow<PagingData<VodInfo>>>()
 
-    private val _uiState = MutableStateFlow(
-        HomeUiState(
-            sites = siteRepository.getEnabledSites()
-        )
-    )
+    private val _uiState = MutableStateFlow(HomeUiState())
     val uiState: StateFlow<HomeUiState> = _uiState.asStateFlow()
 
     init {
-        refresh()
+        initEngine()
+    }
+
+    private fun initEngine() {
+        viewModelScope.launch {
+            _uiState.update { it.copy(loading = true) }
+            val result = engine.start(DefaultSources.default)
+            if (result.isSuccess) {
+                val config = result.getOrThrow()
+                val sites = config.sites.filter { it.isSpiderSite() }
+                val defaultSite = sites.firstOrNull()
+                _uiState.update {
+                    it.copy(
+                        sites = sites,
+                        currentSite = defaultSite,
+                        loading = false
+                    )
+                }
+                defaultSite?.let { loadSite(it) }
+            } else {
+                _uiState.update {
+                    it.copy(loading = false, errorMessage = "加载配置失败: ${result.exceptionOrNull()?.message}")
+                }
+            }
+        }
     }
 
     fun refresh() {
-        val targetSite = _uiState.value.currentSite ?: siteRepository.getDefaultSite()
-        loadSite(targetSite, keepSelection = false)
+        val site = _uiState.value.currentSite ?: return
+        loadSite(site)
     }
 
     fun selectSite(siteKey: String) {
-        val site = siteRepository.getSite(siteKey) ?: return
+        val site = _uiState.value.sites.firstOrNull { it.key == siteKey } ?: return
         if (_uiState.value.currentSite?.key == site.key) return
-        siteRepository.setDefaultSite(site.key)
-        loadSite(site, keepSelection = false)
+        loadSite(site)
     }
 
     fun selectTab(index: Int) {
@@ -73,63 +90,48 @@ class HomeViewModel @Inject constructor(
         showCachedTabOrCreate(site, state.tabs[index], index)
     }
 
-    private fun loadSite(site: Site, keepSelection: Boolean) {
+    private fun loadSite(site: SiteConfig) {
         viewModelScope.launch {
-            val enabledSites = siteRepository.getEnabledSites()
             pagerCache.clear()
             _uiState.update {
                 it.copy(
-                    sites = enabledSites,
                     currentSite = site,
-                    homeState = ApiResult.Loading,
+                    loading = true,
                     videoPagingFlow = emptyFlow(),
                     errorMessage = null
                 )
             }
 
-            when (val result = spiderRepository.loadHomeContent(site)) {
-                is ApiResult.Success -> {
-                    val tabs = buildTabs(result.data)
-                    val selectedTabIndex = if (keepSelection) {
-                        _uiState.value.selectedTabIndex.coerceIn(0, tabs.lastIndex.coerceAtLeast(0))
-                    } else {
-                        0
-                    }
-                    _uiState.update {
-                        it.copy(
-                            sites = enabledSites,
-                            currentSite = site,
-                            homeState = result,
-                            tabs = tabs,
-                            selectedTabIndex = selectedTabIndex,
-                            errorMessage = null
-                        )
-                    }
-                    tabs.getOrNull(selectedTabIndex)?.let { tab ->
-                        showCachedTabOrCreate(site, tab, selectedTabIndex)
-                    }
+            val result = engine.sourceRepository.getHomeContent(site)
+            if (result.isSuccess) {
+                val homeContent = result.getOrThrow()
+                val tabs = buildTabs(homeContent)
+                _uiState.update {
+                    it.copy(
+                        loading = false,
+                        tabs = tabs,
+                        selectedTabIndex = 0,
+                        errorMessage = null
+                    )
                 }
-
-                is ApiResult.Error -> {
-                    _uiState.update {
-                        it.copy(
-                            sites = enabledSites,
-                            currentSite = site,
-                            homeState = result,
-                            tabs = emptyList(),
-                            selectedTabIndex = 0,
-                            videoPagingFlow = emptyFlow(),
-                            errorMessage = result.message
-                        )
-                    }
+                tabs.firstOrNull()?.let { tab ->
+                    showCachedTabOrCreate(site, tab, 0)
                 }
-
-                ApiResult.Loading -> Unit
+            } else {
+                _uiState.update {
+                    it.copy(
+                        loading = false,
+                        tabs = emptyList(),
+                        selectedTabIndex = 0,
+                        videoPagingFlow = emptyFlow(),
+                        errorMessage = result.exceptionOrNull()?.message ?: "加载失败"
+                    )
+                }
             }
         }
     }
 
-    private fun showCachedTabOrCreate(site: Site, tab: HomeTabItem, index: Int) {
+    private fun showCachedTabOrCreate(site: SiteConfig, tab: Category, index: Int) {
         val flow = pagerCache.getOrPut(tab.cacheKey(site)) {
             createPagerFlow(site, tab)
         }
@@ -142,7 +144,7 @@ class HomeViewModel @Inject constructor(
         }
     }
 
-    private fun refreshPager(site: Site, tab: HomeTabItem, index: Int) {
+    private fun refreshPager(site: SiteConfig, tab: Category, index: Int) {
         val flow = createPagerFlow(site, tab)
         pagerCache[tab.cacheKey(site)] = flow
         _uiState.update {
@@ -154,7 +156,7 @@ class HomeViewModel @Inject constructor(
         }
     }
 
-    private fun createPagerFlow(site: Site, tab: HomeTabItem): Flow<PagingData<Video>> {
+    private fun createPagerFlow(site: SiteConfig, tab: Category): Flow<PagingData<VodInfo>> {
         return Pager(
             config = PagingConfig(
                 pageSize = 20,
@@ -166,21 +168,21 @@ class HomeViewModel @Inject constructor(
                 HomePagingSource(
                     site = site,
                     tab = tab,
-                    spiderRepository = spiderRepository,
+                    engine = engine,
                     homeTabId = HOME_TAB_ID
                 )
             }
         ).flow.cachedIn(viewModelScope)
     }
 
-    private fun buildTabs(homeContent: HomeContent?): List<HomeTabItem> {
+    private fun buildTabs(homeContent: HomeContent?): List<Category> {
         return buildList {
-            add(HomeTabItem(HOME_TAB_ID, "首页"))
-            addAll(homeContent?.tabs.orEmpty())
-        }.distinctBy { it.type_id }
+            add(Category(HOME_TAB_ID, "首页"))
+            addAll(homeContent?.categories.orEmpty())
+        }.distinctBy { it.id }
     }
 
-    private fun HomeTabItem.cacheKey(site: Site): String = "${site.key}:${type_id}"
+    private fun Category.cacheKey(site: SiteConfig): String = "${site.key}:${id}"
 
     companion object {
         private const val HOME_TAB_ID = "__home__"
@@ -188,11 +190,11 @@ class HomeViewModel @Inject constructor(
 }
 
 data class HomeUiState(
-    val sites: List<Site> = emptyList(),
-    val currentSite: Site? = null,
-    val tabs: List<HomeTabItem> = emptyList(),
+    val sites: List<SiteConfig> = emptyList(),
+    val currentSite: SiteConfig? = null,
+    val tabs: List<Category> = emptyList(),
     val selectedTabIndex: Int = 0,
-    val homeState: ApiResult<HomeContent?> = ApiResult.Loading,
-    val videoPagingFlow: Flow<PagingData<Video>> = emptyFlow(),
+    val loading: Boolean = false,
+    val videoPagingFlow: Flow<PagingData<VodInfo>> = emptyFlow(),
     val errorMessage: String? = null
 )

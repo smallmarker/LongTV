@@ -18,12 +18,12 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
-import com.loong.longtv.data.bean.Video
+import com.loong.longtv.engine.source.model.VodInfo
 import com.loong.longtv.ui.theme.BrandPrimary
 import com.loong.longtv.ui.shared.widgets.SmartAsyncImage
 
 @Composable
-fun PhoneVideoCard(video: Video) {
+fun PhoneVideoCard(video: VodInfo) {
     val title = video.displayTitle()
     val score = video.displayScore()
 
@@ -35,7 +35,7 @@ fun PhoneVideoCard(video: Video) {
             .background(MaterialTheme.colorScheme.surface)
     ) {
         SmartAsyncImage(
-            model = video.vod_pic.trim(),
+            model = video.pic.orEmpty().trim(),
             contentDescription = title,
             modifier = Modifier
                 .fillMaxWidth()
@@ -61,7 +61,7 @@ fun PhoneVideoCard(video: Video) {
                 modifier = Modifier.fillMaxWidth()
             )
         }
-        val badgeText = video.vod_remarks.orEmpty().ifBlank { "" }
+        val badgeText = video.remarks.orEmpty().ifBlank { "" }
         if (badgeText.isNotBlank()) {
             Text(
                 text = badgeText,
@@ -92,11 +92,11 @@ fun PhoneVideoCard(video: Video) {
     }
 }
 
-private fun Video.displayTitle(): String {
-    return listOf(vod_name, type_name)
+private fun VodInfo.displayTitle(): String {
+    return listOf(name, typeName)
         .map { it.normalizedDisplayText() }
         .firstOrNull { it.isNotBlank() }
-        ?: type_name.ifBlank { "未知标题" }
+        ?: typeName.ifBlank { "未知标题" }
 }
 
 private fun String?.normalizedDisplayText(): String {
@@ -107,8 +107,8 @@ private fun String?.normalizedDisplayText(): String {
     return text
 }
 
-private fun Video.displayScore(): String? {
-    val raw = vod_score.trim()
+private fun VodInfo.displayScore(): String? {
+    val raw = score.trim()
     if (raw.isBlank()) return null
     return raw.toFloatOrNull()
         ?.takeIf { it > 0f }
