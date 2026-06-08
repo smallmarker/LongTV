@@ -63,5 +63,39 @@ object MediaDetector {
             ?: DIRECT_MEDIA_PATTERN.find(trimmed)?.value
     }
 
+    /**
+     * 推断媒体 URL 的 MIME type，用于给 ExoPlayer MediaItem 添加 hint。
+     *
+     * 仅对 http/https URL 有效。优先级：path 扩展名 > query 参数扩展名。
+     * 返回 null 表示无法推断，让 ExoPlayer 自动检测。
+     */
+    fun inferMimeType(url: String?): String? {
+        if (url.isNullOrBlank()) return null
+        val uri = runCatching { Uri.parse(url.trim()) }.getOrNull() ?: return null
+        val lower = url.trim().lowercase(Locale.ROOT)
+        if (!lower.startsWith("http://") && !lower.startsWith("https://")) return null
+
+        // 先检查 path 扩展名
+        val pathExt = uri.path.orEmpty().lowercase(Locale.ROOT).substringAfterLast('.', "")
+        extToMime(pathExt)?.let { return it }
+
+        // 再检查 query 参数中嵌套 URL 的扩展名（如 ?url=xxx.m3u8）
+        for (key in QUERY_KEYS) {
+            val value = uri.getQueryParameter(key) ?: continue
+            val valueExt = value.lowercase(Locale.ROOT).substringAfterLast('.', "")
+            extToMime(valueExt)?.let { return it }
+        }
+        return null
+    }
+
+    private fun extToMime(ext: String): String? = when (ext) {
+        "m3u8"       -> "application/x-mpegURL"
+        "mpd"        -> "application/dash+xml"
+        "mp4", "m4v" -> "video/mp4"
+        "flv"        -> "video/x-flv"
+        "mkv"        -> "video/x-matroska"
+        else         -> null
+    }
+
     fun isDirectMediaUrl(url: String?): Boolean = extractDirectUrl(url) != null
 }

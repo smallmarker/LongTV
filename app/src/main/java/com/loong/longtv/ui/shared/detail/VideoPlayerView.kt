@@ -18,6 +18,7 @@ import androidx.media3.common.PlaybackException
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.datasource.DefaultDataSource
 import androidx.media3.datasource.DefaultHttpDataSource
+import com.loong.longtv.engine.player.MediaDetector
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.DefaultLoadControl
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
@@ -125,7 +126,12 @@ internal fun VideoPlayerViewContent(
     LaunchedEffect(player, videoUrl, requestHeaders, sharedSessionEnabled) {
         try {
             if (!sharedSessionEnabled || SharedPlayerSession.needsPrepare(videoUrl, requestHeaders)) {
-                val item = MediaItem.fromUri(videoUrl.toUri())
+                val mimeType = MediaDetector.inferMimeType(videoUrl)
+                val item = if (mimeType != null) {
+                    MediaItem.Builder().setUri(videoUrl.toUri()).setMimeType(mimeType).build()
+                } else {
+                    MediaItem.fromUri(videoUrl.toUri())
+                }
                 player.setMediaItem(item)
                 player.prepare()
                 if (initialPositionMs > 0) player.seekTo(initialPositionMs)
