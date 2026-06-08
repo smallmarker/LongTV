@@ -1,5 +1,6 @@
 package com.loong.longtv.ui.shared.home
 
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
@@ -14,45 +15,43 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.Image
-import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyRow
-import androidx.compose.foundation.lazy.itemsIndexed
-import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.GridItemSpan
-import androidx.compose.foundation.lazy.grid.rememberLazyGridState
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
+import androidx.compose.foundation.lazy.grid.rememberLazyGridState
+import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Favorite
+import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.filled.Star
+import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Favorite
-import androidx.compose.material.icons.filled.PlayArrow
-import androidx.compose.material.icons.filled.Star
-import androidx.compose.material.icons.filled.Search
-import androidx.compose.material.icons.filled.Settings
-import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
 import androidx.compose.ui.input.nestedscroll.NestedScrollSource
 import androidx.compose.ui.input.nestedscroll.nestedScroll
-import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.painterResource
-import androidx.compose.ui.unit.Velocity
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Velocity
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.navigation.NavController
@@ -64,22 +63,18 @@ import androidx.tv.material3.ExperimentalTvMaterial3Api
 import androidx.tv.material3.Icon
 import androidx.tv.material3.Text
 import com.loong.longtv.R
+import com.loong.longtv.engine.source.model.Category
+import com.loong.longtv.engine.source.model.SiteConfig
+import com.loong.longtv.engine.source.model.VodInfo
 import com.loong.longtv.nav.Screen
-import com.loong.longtv.data.bean.HomeTabItem
-import com.loong.longtv.data.bean.Site
-import com.loong.longtv.data.bean.Video
-import com.loong.longtv.ui.shared.home.HomeUiState
-import com.loong.longtv.ui.shared.home.HomeViewModel
-import com.loong.longtv.data.repository.ApiResult
 import com.loong.longtv.ui.common.DeviceClass
 import com.loong.longtv.ui.common.currentDeviceClass
+import com.loong.longtv.ui.shared.widgets.AppButton
+import com.loong.longtv.ui.shared.widgets.TvSurface
 import com.loong.longtv.ui.theme.AppError
 import com.loong.longtv.ui.theme.AppTextMuted
 import com.loong.longtv.ui.theme.AppTextPrimary
 import com.loong.longtv.ui.theme.BrandPrimary
-import com.loong.longtv.ui.shared.widgets.AppButton
-import com.loong.longtv.ui.shared.widgets.SectionHeader
-import com.loong.longtv.ui.shared.widgets.TvSurface
 
 @OptIn(ExperimentalTvMaterial3Api::class)
 @Composable
@@ -92,14 +87,13 @@ internal fun HomeScreenContent(
     onTabFocused: ((Int) -> Unit)? = null,
     onTabSelected: (Int) -> Unit
 ) {
-    when (val state = uiState.homeState) {
-        is ApiResult.Loading -> LoadingScreen("正在加载站点首页...")
-        is ApiResult.Error -> ErrorScreen(
-            message = state.message ?: "站点首页加载失败",
+    when {
+        uiState.loading -> LoadingScreen("正在加载站点首页...")
+        uiState.errorMessage != null -> ErrorScreen(
+            message = uiState.errorMessage,
             onRetry = onRetry
         )
-
-        is ApiResult.Success -> HomeContentSection(
+        else -> HomeContentSection(
             tabs = uiState.tabs,
             selectedTabIndex = uiState.selectedTabIndex,
             currentSite = uiState.currentSite,
@@ -366,12 +360,12 @@ private fun QuickAction(
 @OptIn(ExperimentalLayoutApi::class, ExperimentalTvMaterial3Api::class)
 @Composable
 internal fun HomeContentSection(
-    tabs: List<HomeTabItem>,
+    tabs: List<Category>,
     selectedTabIndex: Int,
-    currentSite: Site?,
+    currentSite: SiteConfig?,
     compact: Boolean,
     phoneLayout: Boolean,
-    videoPagingFlow: kotlinx.coroutines.flow.Flow<PagingData<Video>>,
+    videoPagingFlow: kotlinx.coroutines.flow.Flow<PagingData<VodInfo>>,
     onRetry: () -> Unit,
     onTabFocused: ((Int) -> Unit)? = null,
     onTabSelected: (Int) -> Unit,
@@ -380,7 +374,7 @@ internal fun HomeContentSection(
     Column(modifier = Modifier.fillMaxSize()) {
         if (tabs.isNotEmpty()) {
             HomeTabsRow(
-                items = tabs.map { it.type_name.ifBlank { "未命名分类" } },
+                items = tabs.map { it.name.ifBlank { "未命名分类" } },
                 selectedIndex = selectedTabIndex,
                 onFocusSelect = onTabFocused,
                 onSelect = onTabSelected,
@@ -502,8 +496,8 @@ private fun HomeTabChip(
 
 @Composable
 private fun VideoListScreen(
-    pagingFlow: kotlinx.coroutines.flow.Flow<PagingData<Video>>,
-    selectedTab: HomeTabItem?,
+    pagingFlow: kotlinx.coroutines.flow.Flow<PagingData<VodInfo>>,
+    selectedTab: Category?,
     currentSiteKey: String,
     compact: Boolean,
     phoneLayout: Boolean,
@@ -539,7 +533,7 @@ private fun VideoListScreen(
     val refreshState = pagingItems.loadState.refresh
     val appendState = pagingItems.loadState.append
 
-    LaunchedEffect(selectedTab?.type_id) {
+    LaunchedEffect(selectedTab?.id) {
         if (pagingItems.itemCount > 0) {
             gridState.animateScrollToItem(0)
         }
@@ -562,7 +556,7 @@ private fun VideoListScreen(
     }
 
     if (refreshState is LoadState.NotLoading && pagingItems.itemCount == 0) {
-        EmptyScreen("${selectedTab?.type_name ?: "当前分类"}暂无内容")
+        EmptyScreen("${selectedTab?.name ?: "当前分类"}暂无内容")
         return
     }
 
@@ -593,15 +587,14 @@ private fun VideoListScreen(
         ) {
             items(
                 count = pagingItems.itemCount,
-                key = pagingItems.itemKey { video -> video.vod_id.ifBlank { "${video.type_id}-${video.vod_name}" } }
+                key = pagingItems.itemKey { video -> video.id.ifBlank { "${video.typeId}-${video.name}" } }
             ) { index ->
                 val video = pagingItems[index] ?: return@items
                 TvSurface(
                     onClick = {
-                        val siteKey = video.safeSiteKey(currentSiteKey)
-                        val videoId = video.safeVideoId()
-                        if (siteKey.isNotBlank() && videoId.isNotBlank()) {
-                            navController.navigate(Screen.VideoDetail.createRoute(siteKey, videoId))
+                        val title = video.name.trim()
+                        if (title.isNotBlank()) {
+                            navController.navigate(Screen.SearchResult.createRoute(title))
                         }
                     }
                 ) {
@@ -688,12 +681,19 @@ internal fun ErrorScreen(message: String, onRetry: () -> Unit) {
     }
 }
 
-private fun com.loong.longtv.data.bean.Video.safeSiteKey(fallback: String = ""): String {
-    return runCatching { key }.getOrNull().orEmpty().ifBlank { fallback }
+private fun VodInfo.safeSiteKey(fallback: String = ""): String {
+    return siteKey.ifBlank { fallback }
 }
 
-private fun com.loong.longtv.data.bean.Video.safeVideoId(): String {
-    return runCatching { vod_id }.getOrNull().orEmpty()
+private fun VodInfo.safeVideoId(): String {
+    return id
+}
+
+private fun VodInfo.searchKeyword(): String {
+    return listOf(name, typeName)
+        .map { it.trim() }
+        .firstOrNull { it.isNotBlank() && it != "热播" && !it.contains("暂无海报") }
+        .orEmpty()
 }
 
 @Composable
