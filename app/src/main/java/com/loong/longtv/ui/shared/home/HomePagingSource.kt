@@ -2,52 +2,43 @@ package com.loong.longtv.ui.shared.home
 
 import androidx.paging.PagingSource
 import androidx.paging.PagingState
-import com.loong.longtv.data.bean.HomeTabItem
-import com.loong.longtv.data.bean.Site
-import com.loong.longtv.data.bean.Video
-import com.loong.longtv.data.repository.ApiResult
-import com.loong.longtv.data.repository.SpiderRepository
+import com.loong.longtv.engine.TvBoxEngine
+import com.loong.longtv.engine.source.model.Category
+import com.loong.longtv.engine.source.model.SiteConfig
+import com.loong.longtv.engine.source.model.VodInfo
 
 class HomePagingSource(
-    private val site: Site,
-    private val tab: HomeTabItem,
-    private val spiderRepository: SpiderRepository,
+    private val site: SiteConfig,
+    private val tab: Category,
+    private val engine: TvBoxEngine,
     private val homeTabId: String
-) : PagingSource<Int, Video>() {
+) : PagingSource<Int, VodInfo>() {
 
-    override suspend fun load(params: LoadParams<Int>): LoadResult<Int, Video> {
+    override suspend fun load(params: LoadParams<Int>): LoadResult<Int, VodInfo> {
         val page = params.key ?: 1
-        val result = if (tab.type_id == homeTabId) {
-            spiderRepository.loadHomeVideoContent(site)
-        } else {
-            spiderRepository.loadCategoryContent(site, tab, page)
-        }
+        // 首页 tab 使用 categoryId="0"，与其他分类加载方式一致
+        val categoryId = if (tab.id == homeTabId) "0" else tab.id
+        val result = engine.sourceRepository.getCategoryContent(site, categoryId, page)
 
-        return when (result) {
-            is ApiResult.Success -> {
-                val content = result.data
-                val items = content?.list.orEmpty()
-                items.forEach { it.key = site.key }
-                val nextKey = when {
-                    tab.type_id == homeTabId -> null
-                    content == null -> null
-                    content.page >= content.pagecount -> null
-                    items.isEmpty() -> null
-                    else -> page + 1
-                }
-                LoadResult.Page(
-                    data = items,
-                    prevKey = if (page == 1) null else page - 1,
-                    nextKey = nextKey
-                )
+        return if (result.isSuccess) {
+            val content = result.getOrThrow()
+            val items = content.list.onEach { it.siteKey = site.key }
+            val nextKey = when {
+                content.page >= content.pagecount -> null
+                items.isEmpty() -> null
+                else -> page + 1
             }
-
-            is ApiResult.Error -> LoadResult.Error(result.exception ?: IllegalStateException(result.message))
-            ApiResult.Loading -> LoadResult.Page(data = emptyList(), prevKey = null, nextKey = null)
+            LoadResult.Page(
+                data = items,
+                prevKey = if (page == 1) null else page - 1,
+                nextKey = nextKey
+            )
+        } else {
+            LoadResult.Error(result.exceptionOrNull() ?: IllegalStateException("Unknown error"))
         }
     }
 
-    override fun getRefreshKey(state: PagingState<Int, Video>): Int? {
+    override fun getRefreshKey(state: PagingState<Int, VodInfo>): Int? {
         val anchorPosition = state.anchorPosition ?: return null
         val page = state.closestPageToPosition(anchorPosition)
         return page?.prevKey?.plus(1) ?: page?.nextKey?.minus(1)
