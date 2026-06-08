@@ -255,24 +255,76 @@ class SpiderLoader(private val context: Context) {
     }
 
     /**
-     * 对 guard.dex 内部的 com.github.catvod.Init 和 com.github.catvod.spider.InitOrigin
-     * （若存在）设置 applicationContext，防止 guard.dex 的 Spider 类调用
-     * Init.context() / InitOrigin.getSpStr() 时 context 为 null。
+     * 对 guard.dex 内部所有需要 Context 的类进行初始化：
+     *
+     * 1. 对已知 Init 类调用 init()/set() 方法（原版 TVBox 用 init(Application)，
+     *    不是 set()，之前只找 set 所以无效）
+     * 2. 暴力扫描 guardLoader 下所有 com.github.catvod 包的类，将所有 null 的
+     *    静态 Context/Application 字段设为 applicationContext，覆盖 اﺕﻅو、
+     *    فشﻙغ、Nmyswv 等工具类（在 x86_64 模拟器上 native 不会帮我们初始化它们）
      */
     private fun initGuardContext(gl: ClassLoader) {
         val app = context.applicationContext
-        val candidates = listOf("com.github.catvod.Init", "com.github.catvod.spider.InitOrigin")
-        for (className in candidates) {
+
+        // 1. 对已知 Init 类调用 init() 或 set()（顺序：init 优先，因为原版 TVBox 用 init()）
+        val initCandidates = listOf("com.github.catvod.Init", "com.github.catvod.spider.InitOrigin")
+        for (className in initCandidates) {
             runCatching {
                 val clazz = gl.loadClass(className)
-                val setMethod = clazz.methods.firstOrNull { m ->
-                    m.name == "set" && m.parameterTypes.size == 1
+                val method = clazz.methods.firstOrNull { m ->
+                    m.parameterTypes.size == 1 && m.name in listOf("init", "set")
                 } ?: return@runCatching
-                setMethod.invoke(null, app)
-                Log.i(TAG, "Set applicationContext on guard.dex's $className via $setMethod")
+                method.invoke(null, app)
+                Log.i(TAG, "Called ${className}.${method.name}(app) on guard.dex class")
             }.onFailure {
-                Log.d(TAG, "guard.dex $className: ${it.message}")
+                Log.d(TAG, "guard.dex $className init/set: ${it.message}")
             }
+        }
+
+        // 2. 暴力扫描：枚举 guardLoader 中 com.github.catvod 包下的所有类，
+        //    将所有 null 的静态 Context/Application 字段设为 applicationContext。
+        //    这可以覆盖 native 初始化阶段原本会设置的那些工具类字段。
+        runCatching {
+            val pathListField = dalvik.system.BaseDexClassLoader::class.java
+                .getDeclaredField("pathList").apply { isAccessible = true }
+            val pathList = pathListField.get(gl as dalvik.system.BaseDexClassLoader)
+
+            val dexElementsField = pathList.javaClass
+                .getDeclaredField("dexElements").apply { isAccessible = true }
+            val elements = dexElementsField.get(pathList) as Array<*>
+
+            var patchCount = 0
+            for (element in elements) {
+                // dexFile 字段（API 26+ 已移除，换成 path；尝试两种字段名）
+                val classNames: List<String> = runCatching {
+                    val dexFileField = element!!.javaClass
+                        .getDeclaredField("dexFile").apply { isAccessible = true }
+                    val dexFile = dexFileField.get(element) ?: return@runCatching emptyList()
+                    val entries = dexFile.javaClass.getMethod("entries").invoke(dexFile)
+                            as? java.util.Enumeration<*> ?: return@runCatching emptyList()
+                    buildList { while (entries.hasMoreElements()) add(entries.nextElement() as String) }
+                }.getOrElse { emptyList() }
+
+                for (className in classNames) {
+                    if (!className.startsWith("com.github.catvod")) continue
+                    runCatching {
+                        val clazz = gl.loadClass(className)
+                        for (field in clazz.declaredFields) {
+                            if (!java.lang.reflect.Modifier.isStatic(field.modifiers)) continue
+                            if (!android.content.Context::class.java.isAssignableFrom(field.type)) continue
+                            field.isAccessible = true
+                            if (field.get(null) == null) {
+                                field.set(null, app)
+                                patchCount++
+                                Log.d(TAG, "Patched null Context field [${field.name}] in $className")
+                            }
+                        }
+                    }
+                }
+            }
+            Log.i(TAG, "Brute-force guard context init complete: patched $patchCount null Context fields")
+        }.onFailure {
+            Log.w(TAG, "Brute-force guard context scan failed: ${it.message}")
         }
     }
 
