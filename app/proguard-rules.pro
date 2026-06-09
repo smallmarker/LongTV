@@ -39,6 +39,8 @@
 # Keep CatVod/Spider integration classes that are instantiated across module boundaries.
 -keep class com.loong.longtv.core.spider.** { *; }
 -keep class com.github.catvod.crawler.** { *; }
+# Keep all app-bundled Spider implementations (loaded reflectively by class name).
+-keep class com.github.catvod.spider.** { *; }
 
 # Hilt / Dagger generated graphs rely on annotation metadata.
 -keep class dagger.hilt.** { *; }

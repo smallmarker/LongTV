@@ -1,0 +1,39 @@
+package com.loong.longtv.data
+
+import android.content.Context
+import com.loong.longtv.engine.config.ConfigSource
+
+private const val PREFS_NAME = "longtv_source_prefs"
+private const val KEY_TYPE = "source_type"
+private const val KEY_NAME = "source_name"
+private const val KEY_DATA = "source_data"
+
+class SourcePreference(context: Context) {
+
+    private val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+
+    fun save(source: ConfigSource) {
+        val (type, data) = when (source) {
+            is ConfigSource.Asset -> "asset" to source.assetPath
+            is ConfigSource.Remote -> "remote" to source.url
+            is ConfigSource.Local -> "local" to source.filePath
+        }
+        prefs.edit()
+            .putString(KEY_TYPE, type)
+            .putString(KEY_NAME, source.displayName())
+            .putString(KEY_DATA, data)
+            .apply()
+    }
+
+    fun load(): ConfigSource? {
+        val type = prefs.getString(KEY_TYPE, null) ?: return null
+        val name = prefs.getString(KEY_NAME, null) ?: return null
+        val data = prefs.getString(KEY_DATA, null) ?: return null
+        return when (type) {
+            "asset" -> ConfigSource.Asset(name = name, assetPath = data)
+            "remote" -> ConfigSource.Remote(name = name, url = data)
+            "local" -> ConfigSource.Local(name = name, filePath = data)
+            else -> null
+        }
+    }
+}

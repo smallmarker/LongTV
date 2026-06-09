@@ -6,6 +6,7 @@ import androidx.paging.Pager
 import androidx.paging.PagingConfig
 import androidx.paging.PagingData
 import androidx.paging.cachedIn
+import com.loong.longtv.data.SourcePreference
 import com.loong.longtv.di.DefaultSources
 import com.loong.longtv.engine.TvBoxEngine
 import com.loong.longtv.engine.source.model.Category
@@ -25,6 +26,7 @@ import javax.inject.Inject
 @HiltViewModel
 class HomeViewModel @Inject constructor(
     private val engine: TvBoxEngine,
+    private val sourcePreference: SourcePreference,
 ) : ViewModel() {
     private val pagerCache = mutableMapOf<String, Flow<PagingData<VodInfo>>>()
 
@@ -38,7 +40,8 @@ class HomeViewModel @Inject constructor(
     private fun initEngine() {
         viewModelScope.launch {
             _uiState.update { it.copy(loading = true) }
-            val result = engine.start(DefaultSources.default)
+            val source = sourcePreference.load() ?: DefaultSources.default
+            val result = engine.start(source)
             if (result.isSuccess) {
                 val config = result.getOrThrow()
                 val sites = config.sites.filter { it.isSpiderSite() }

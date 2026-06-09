@@ -1,0 +1,17 @@
+{
+    "spider": "",
+    "sites": [
+        {
+            "key": "热播影视",
+            "name": "☀热播🔹影视",
+            "type": 3,
+            "api": "csp_AppRJ",
+            "searchable": 1,
+            "quickSearch": 1,
+            "filterable": 0,
+            "ext": {
+                "url": "http://v.rbotv.cn"
+            }
+        }
+    ]
+}

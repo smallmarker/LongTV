@@ -1,6 +1,7 @@
 package com.loong.longtv.di
 
 import android.content.Context
+import com.loong.longtv.data.SourcePreference
 import com.loong.longtv.engine.TvBoxEngine
 import com.loong.longtv.engine.config.ConfigManager
 import com.loong.longtv.engine.player.PlayerResolver
@@ -38,4 +39,10 @@ object EngineModule {
     @Provides
     @Singleton
     fun providePlayerResolver(engine: TvBoxEngine): PlayerResolver = engine.playerResolver
+
+    @Provides
+    @Singleton
+    fun provideSourcePreference(@ApplicationContext context: Context): SourcePreference {
+        return SourcePreference(context)
+    }
 }

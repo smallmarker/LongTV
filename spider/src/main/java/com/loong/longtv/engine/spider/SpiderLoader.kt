@@ -30,6 +30,10 @@ class SpiderLoader(private val context: Context) {
     private var guardLoader: ClassLoader? = null
     private var currentJarPath: String? = null
 
+    /** 已通过app自身classLoader成功实例化过Spider（无需jar的本地内置模式） */
+    @Volatile
+    private var appOnlyMode = false
+
     /**
      * 加载Jar文件，创建DexClassLoader
      */
@@ -80,12 +84,15 @@ class SpiderLoader(private val context: Context) {
 
     /**
      * 根据类名创建Spider实例
-     * @param className 短类名（如 "DouDouGuard" 或 "XPathGuard"）
+     * @param className 短类名（如 "DouDouGuard" 或 "AppRJ"）
      */
     fun createSpider(className: String): Spider? {
-        val loader = classLoader ?: run {
-            Log.e(TAG, "ClassLoader not initialized, call loadJar first")
-            return null
+        val fullClassName = "$SPIDER_PACKAGE.$className"
+
+        val loader = classLoader
+        if (loader == null) {
+            // 无jar加载 — 尝试从app自身classLoader创建内置Spider
+            return createFromAppClassLoader(fullClassName)
         }
 
         // 在实例化Spider前检查JAR的Init.loader()是否已就绪。
@@ -96,10 +103,8 @@ class SpiderLoader(private val context: Context) {
             return null
         }
 
-        val fullClassName = "$SPIDER_PACKAGE.$className"
-
         // 优先从 spider.jar 的 classloader 加载；对于只存在于 guard.dex 的类
-        // （如 XPathGuard），fallback 到 guardLoader。
+        // （如 XPathGuard），fallback 到 guardLoader，最终回退至 app 内置 Spider。
         val instance = runCatching {
             val clazz = loader.loadClass(fullClassName)
             clazz.getDeclaredConstructor().newInstance()
@@ -109,18 +114,43 @@ class SpiderLoader(private val context: Context) {
                 return null
             }
             // ClassNotFoundException：尝试从 guard.dex classloader 加载
-            val gl = guardLoader ?: run {
-                Log.e(TAG, "Failed to create spider: $fullClassName (not in spider.jar, no guard loader)", e1)
-                return null
+            val gl = guardLoader
+            if (gl != null) {
+                runCatching {
+                    val clazz = gl.loadClass(fullClassName)
+                    clazz.getDeclaredConstructor().newInstance()
+                }.getOrElse { e2 ->
+                    if (e2 !is ClassNotFoundException) {
+                        Log.e(TAG, "Failed to create spider in guard loader: $fullClassName", e2)
+                        return null
+                    }
+                    // 最终回退：尝试 app 自身 classLoader（app内置Spider）
+                    createFromAppClassLoader(fullClassName)
+                }
+            } else {
+                // 无 guard loader：尝试 app 自身 classLoader
+                createFromAppClassLoader(fullClassName)
             }
-            runCatching {
-                val clazz = gl.loadClass(fullClassName)
-                clazz.getDeclaredConstructor().newInstance()
-            }.onFailure {
-                Log.e(TAG, "Failed to create spider in guard loader: $fullClassName", it)
-            }.getOrNull()
         }
         return instance as? Spider
+    }
+
+    /**
+     * 从app自身classLoader加载Spider类（用于内置Spider，无需外部jar）。
+     * DexClassLoader父loader为context.classLoader，故parent-first委托下app内的类
+     * 已可被jar-loader找到；此方法用于无jar时直接走app classLoader的显式路径。
+     */
+    private fun createFromAppClassLoader(fullClassName: String): Spider? {
+        return runCatching {
+            val clazz = context.classLoader.loadClass(fullClassName)
+            (clazz.getDeclaredConstructor().newInstance() as? Spider)?.also {
+                appOnlyMode = true
+                Log.d(TAG, "Spider created from app classLoader: $fullClassName")
+            }
+        }.getOrElse {
+            Log.e(TAG, "Spider not found in app classLoader: $fullClassName", it)
+            null
+        }
     }
 
     /**
@@ -328,12 +358,13 @@ class SpiderLoader(private val context: Context) {
         }
     }
 
-    fun isLoaded(): Boolean = classLoader != null
+    fun isLoaded(): Boolean = classLoader != null || appOnlyMode
 
     fun release() {
         classLoader = null
         guardLoader = null
         currentJarPath = null
+        appOnlyMode = false
     }
 
     companion object {

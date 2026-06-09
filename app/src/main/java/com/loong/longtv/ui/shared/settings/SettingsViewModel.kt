@@ -2,6 +2,7 @@ package com.loong.longtv.ui.shared.settings
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.loong.longtv.data.SourcePreference
 import com.loong.longtv.di.DefaultSources
 import com.loong.longtv.engine.TvBoxEngine
 import com.loong.longtv.engine.config.ConfigSource
@@ -29,6 +30,7 @@ data class SiteToggleItem(
 @HiltViewModel
 class SettingsViewModel @Inject constructor(
     private val engine: TvBoxEngine,
+    private val sourcePreference: SourcePreference,
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(SettingsUiState())
@@ -52,6 +54,7 @@ class SettingsViewModel @Inject constructor(
             _uiState.value = _uiState.value.copy(loading = true, error = null)
             val result = engine.switchSource(source)
             if (result.isSuccess) {
+                sourcePreference.save(source)
                 refresh()
                 _uiState.value = _uiState.value.copy(loading = false)
             } else {
