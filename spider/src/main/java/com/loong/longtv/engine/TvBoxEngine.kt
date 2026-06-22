@@ -17,7 +17,7 @@ import com.loong.longtv.engine.spider.SpiderManager
 class TvBoxEngine(context: Context) {
 
     val configManager = ConfigManager(context)
-    val spiderManager = SpiderManager(context, configManager)
+    val spiderManager = SpiderManager(context)
     val sourceRepository = SourceRepository(spiderManager)
     val playerResolver = PlayerResolver()
 

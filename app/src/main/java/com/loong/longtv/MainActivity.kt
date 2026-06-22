@@ -13,6 +13,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.tooling.preview.Preview
 import com.loong.longtv.nav.AppNavGraph
+import com.loong.longtv.ui.adaptive.AutoSizeLayout
 import com.loong.longtv.ui.common.DeviceClass
 import com.loong.longtv.ui.common.currentDeviceClass
 import com.loong.longtv.ui.theme.LongTVTheme
@@ -46,8 +47,10 @@ class MainActivity : ComponentActivity() {
     private fun setMainContent() {
         setContent {
             LongTVTheme {
-                Box(modifier = Modifier.fillMaxSize()) {
-                    AppNavGraph()
+                AutoSizeLayout {
+                    Box(modifier = Modifier.fillMaxSize()) {
+                        AppNavGraph()
+                    }
                 }
             }
         }
@@ -75,6 +78,8 @@ class MainActivity : ComponentActivity() {
 @Composable
 fun GreetingPreview() {
     LongTVTheme {
-        AppNavGraph()
+        AutoSizeLayout {
+            AppNavGraph()
+        }
     }
 }

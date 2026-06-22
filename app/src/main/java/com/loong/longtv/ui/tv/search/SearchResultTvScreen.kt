@@ -36,10 +36,6 @@ fun SearchResultTvScreen(
     }
 
     AppScreen {
-        AppHero(
-            title = "搜索结果",
-            subtitle = "关键词 “$keyword” 的聚合结果会按站点分组展示，方便快速切换片源。"
-        )
         SearchResultContent(
             navigator = navigator,
             keyword = keyword,

@@ -107,6 +107,7 @@ internal fun VideoDetailRouteContent(
         sources: List<PlayLine>,
         selectedSource: PlayLine?,
         playableMedia: PlayableMedia?,
+        openingFullscreen: Boolean,
         onOpenFullscreen: (PlayableMedia, String) -> Unit,
         onProgressChanged: (Long, Long) -> Unit,
         onToggleFavorite: () -> Unit,
@@ -121,8 +122,10 @@ internal fun VideoDetailRouteContent(
     val currentBackStackEntry by navigator.currentBackStackEntryAsState()
     val savedStateHandle = currentBackStackEntry?.savedStateHandle
     var reopenFullscreenAfterSwitch by remember(key, id) { mutableStateOf(false) }
+    var openingFullscreen by remember(key, id) { mutableStateOf(false) }
 
     fun openFullscreen(playableMedia: PlayableMedia, episodeName: String) {
+        openingFullscreen = true
         navigator.navigate(
             Screen.FullscreenPlayer.createRoute(
                 title = buildString {
@@ -144,6 +147,7 @@ internal fun VideoDetailRouteContent(
 
     LaunchedEffect(currentBackStackEntry) {
         val position = savedStateHandle?.remove<Long>("fullscreen_position") ?: return@LaunchedEffect
+        openingFullscreen = false
         viewModel.applyFullscreenProgress(position)
     }
 
@@ -196,6 +200,7 @@ internal fun VideoDetailRouteContent(
                 sources,
                 selectedSource,
                 playableMedia,
+                openingFullscreen,
                 ::openFullscreen,
                 viewModel::saveProgress,
                 viewModel::toggleFavorite,
@@ -217,6 +222,7 @@ internal fun DetailPreviewBlock(
     resumePositionMs: Long,
     selectedSource: PlayLine?,
     selectedEpisodeIndex: Int,
+    sharedSessionReleaseDelayMs: Long,
     onBack: () -> Unit,
     onOpenFullscreen: (PlayableMedia, String) -> Unit,
     onProgressChanged: (Long, Long) -> Unit
@@ -372,6 +378,7 @@ internal fun DetailPreviewBlock(
                 initialPositionMs = resumePositionMs,
                 enableNativeController = false,
                 sharedSessionEnabled = true,
+                sharedSessionReleaseDelayMs = sharedSessionReleaseDelayMs,
                 controlState = controlState,
                 onProgressChanged = { position, duration ->
                     currentPositionMs = position
@@ -386,6 +393,12 @@ internal fun DetailPreviewBlock(
                 },
                 onPlayingChanged = { playing ->
                     isPlaying = playing
+                },
+                onSurfaceTap = {
+                    chromeVisible = !chromeVisible
+                    if (chromeVisible) {
+                        chromeInteractionVersion += 1
+                    }
                 }
             )
         } else {
@@ -467,6 +480,9 @@ internal fun DetailPreviewBlock(
             }
         }
 
+        val readyPlayableMedia = playableMedia
+            ?.takeIf { it.url.isNotBlank() && !it.needsParse() }
+
         if (chromeVisible) {
             PlayerTopInlineBar(
                 modifier = Modifier
@@ -531,14 +547,15 @@ internal fun DetailPreviewBlock(
                     fontSize = 12.sp,
                     modifier = Modifier.padding(start = 10.dp)
                 )
-                if (playableMedia != null && !playableMedia.needsParse() && playableMedia.url.isNotBlank()) {
+                if (readyPlayableMedia != null) {
                     FullscreenIconButton(
                         modifier = Modifier.padding(start = 10.dp),
-                        onClick = { onOpenFullscreen(playableMedia, episodeName) }
+                        onClick = { onOpenFullscreen(readyPlayableMedia, episodeName) }
                     )
                 }
             }
         }
+
     }
 }
 
@@ -1542,6 +1559,7 @@ private fun TvEpisodeTile(
         onClick = onClick,
         modifier = Modifier
             .width(148.dp)
+            .height(58.dp)
             .clip(shape)
             .border(
                 BorderStroke(
@@ -1558,25 +1576,31 @@ private fun TvEpisodeTile(
             disabledContainerColor = AppSurfaceVariant.copy(alpha = 0.58f)
         )
     ) {
-        Column(
-            modifier = Modifier.padding(horizontal = 14.dp, vertical = 12.dp),
-            verticalArrangement = Arrangement.spacedBy(4.dp)
+        Row(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(horizontal = 13.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(9.dp)
         ) {
-            if (selected) {
-                Text(
-                    text = "当前播放",
-                    color = BrandPrimary,
-                    fontSize = 11.sp,
-                    fontWeight = FontWeight.Medium
-                )
-            }
+            Box(
+                modifier = Modifier
+                    .width(3.dp)
+                    .height(22.dp)
+                    .clip(RoundedCornerShape(999.dp))
+                    .background(
+                        if (selected) BrandPrimary
+                        else Color.White.copy(alpha = 0.10f)
+                    )
+            )
             Text(
                 text = text,
                 color = AppTextPrimary,
                 fontSize = 14.sp,
                 fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal,
                 maxLines = 1,
-                overflow = TextOverflow.Ellipsis
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.weight(1f)
             )
         }
     }
@@ -1591,6 +1615,7 @@ private fun PhoneEpisodeCard(
 ) {
     Box(
         modifier = modifier
+            .height(52.dp)
             .clip(RoundedCornerShape(18.dp))
             .background(
                 if (selected) Color.White.copy(alpha = 0.10f)
@@ -1605,24 +1630,32 @@ private fun PhoneEpisodeCard(
                 shape = RoundedCornerShape(18.dp)
             )
             .clickable(onClick = onClick)
-            .padding(horizontal = 14.dp, vertical = 14.dp)
+            .padding(horizontal = 12.dp),
+        contentAlignment = Alignment.Center
     ) {
-        Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-            if (selected) {
-                Text(
-                    text = "当前播放",
-                    color = BrandSecondary,
-                    fontSize = 11.sp,
-                    fontWeight = FontWeight.Medium
-                )
-            }
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            Box(
+                modifier = Modifier
+                    .width(3.dp)
+                    .height(20.dp)
+                    .clip(RoundedCornerShape(999.dp))
+                    .background(
+                        if (selected) BrandSecondary
+                        else Color.White.copy(alpha = 0.10f)
+                    )
+            )
             Text(
                 text = text,
                 color = AppTextPrimary,
                 fontSize = 14.sp,
                 fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal,
                 maxLines = 1,
-                overflow = TextOverflow.Ellipsis
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.weight(1f)
             )
         }
     }

@@ -584,6 +584,7 @@ internal fun FullscreenPlayerContent(
             showController = false,
             enableNativeController = false,
             sharedSessionEnabled = true,
+            sharedSessionReleaseDelayMs = 5_000L,
             controlState = controlState,
             onProgressChanged = { position, duration ->
                 currentPositionMs = position
@@ -601,6 +602,9 @@ internal fun FullscreenPlayerContent(
             onPlaybackError = { message ->
                 playbackError = message
                 overlayVisible = true
+            },
+            onSurfaceTap = {
+                toggleOverlayVisibility()
             }
         )
 

@@ -40,10 +40,14 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
 import androidx.compose.ui.input.nestedscroll.NestedScrollSource
 import androidx.compose.ui.input.nestedscroll.nestedScroll
@@ -52,6 +56,7 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Velocity
+import androidx.compose.foundation.Canvas
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.navigation.NavController
@@ -64,6 +69,8 @@ import androidx.tv.material3.Icon
 import androidx.tv.material3.Text
 import com.loong.longtv.R
 import com.loong.longtv.engine.source.model.Category
+import com.loong.longtv.engine.source.model.Filter
+import com.loong.longtv.engine.source.model.FilterValue
 import com.loong.longtv.engine.source.model.SiteConfig
 import com.loong.longtv.engine.source.model.VodInfo
 import com.loong.longtv.nav.Screen
@@ -72,6 +79,7 @@ import com.loong.longtv.ui.common.currentDeviceClass
 import com.loong.longtv.ui.shared.widgets.AppButton
 import com.loong.longtv.ui.shared.widgets.TvSurface
 import com.loong.longtv.ui.theme.AppError
+import com.loong.longtv.ui.theme.AppSurface
 import com.loong.longtv.ui.theme.AppTextMuted
 import com.loong.longtv.ui.theme.AppTextPrimary
 import com.loong.longtv.ui.theme.BrandPrimary
@@ -85,7 +93,8 @@ internal fun HomeScreenContent(
     phoneLayout: Boolean,
     onRetry: () -> Unit,
     onTabFocused: ((Int) -> Unit)? = null,
-    onTabSelected: (Int) -> Unit
+    onTabSelected: (Int) -> Unit,
+    onFilterSelected: (String, String) -> Unit
 ) {
     when {
         uiState.loading -> LoadingScreen("正在加载站点首页...")
@@ -95,6 +104,9 @@ internal fun HomeScreenContent(
         )
         else -> HomeContentSection(
             tabs = uiState.tabs,
+            filters = uiState.filters,
+            selectedFilters = uiState.selectedFilters,
+            filterPanelVisible = uiState.filterPanelVisible,
             selectedTabIndex = uiState.selectedTabIndex,
             currentSite = uiState.currentSite,
             compact = compact,
@@ -103,6 +115,7 @@ internal fun HomeScreenContent(
             onRetry = onRetry,
             onTabFocused = onTabFocused,
             onTabSelected = onTabSelected,
+            onFilterSelected = onFilterSelected,
             navController = navController
         )
     }
@@ -270,60 +283,88 @@ internal fun QuickActions(
     compact: Boolean,
     modifier: Modifier = Modifier
 ) {
-    FlowRow(
-        modifier = modifier,
-        horizontalArrangement = Arrangement.spacedBy(12.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp)
-    ) {
-        QuickAction(
-            icon = {
-                Icon(
-                    imageVector = Icons.Default.Search,
-                    contentDescription = "搜索",
-                    tint = Color.White
-                )
-            },
-            label = "搜索",
-            compact = compact,
-            onClick = { navController.navigate(Screen.Search.route) }
-        )
-        QuickAction(
-            icon = {
-                Icon(
-                    imageVector = Icons.Default.Star,
-                    contentDescription = "历史",
-                    tint = Color.White
-                )
-            },
-            label = "历史",
-            compact = compact,
-            onClick = { navController.navigate(Screen.History.route) }
-        )
-        QuickAction(
-            icon = {
-                Icon(
-                    imageVector = Icons.Default.Favorite,
-                    contentDescription = "收藏",
-                    tint = Color.White
-                )
-            },
-            label = "收藏",
-            compact = compact,
-            onClick = { navController.navigate(Screen.Favorite.route) }
-        )
-        QuickAction(
-            icon = {
-                Icon(
-                    imageVector = Icons.Default.Settings,
-                    contentDescription = "设置",
-                    tint = Color.White
-                )
-            },
-            label = "设置",
-            compact = compact,
-            onClick = { navController.navigate(Screen.Settings.route) }
-        )
+    val horizontalGap = if (compact) 6.dp else 12.dp
+
+    if (compact) {
+        Row(
+            modifier = modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(horizontalGap)
+        ) {
+            QuickAction(
+                icon = { QuickActionIcon(Icons.Default.Search, "搜索", compact) },
+                label = "搜索",
+                compact = compact,
+                modifier = Modifier.weight(1f),
+                onClick = { navController.navigate(Screen.Search.route) }
+            )
+            QuickAction(
+                icon = { QuickActionIcon(Icons.Default.Star, "历史", compact) },
+                label = "历史",
+                compact = compact,
+                modifier = Modifier.weight(1f),
+                onClick = { navController.navigate(Screen.History.route) }
+            )
+            QuickAction(
+                icon = { QuickActionIcon(Icons.Default.Favorite, "收藏", compact) },
+                label = "收藏",
+                compact = compact,
+                modifier = Modifier.weight(1f),
+                onClick = { navController.navigate(Screen.Favorite.route) }
+            )
+            QuickAction(
+                icon = { QuickActionIcon(Icons.Default.Settings, "设置", compact) },
+                label = "设置",
+                compact = compact,
+                modifier = Modifier.weight(1f),
+                onClick = { navController.navigate(Screen.Settings.route) }
+            )
+        }
+    } else {
+        FlowRow(
+            modifier = modifier,
+            horizontalArrangement = Arrangement.spacedBy(horizontalGap),
+            verticalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            QuickAction(
+                icon = { QuickActionIcon(Icons.Default.Search, "搜索", compact) },
+                label = "搜索",
+                compact = compact,
+                onClick = { navController.navigate(Screen.Search.route) }
+            )
+            QuickAction(
+                icon = { QuickActionIcon(Icons.Default.Star, "历史", compact) },
+                label = "历史",
+                compact = compact,
+                onClick = { navController.navigate(Screen.History.route) }
+            )
+            QuickAction(
+                icon = { QuickActionIcon(Icons.Default.Favorite, "收藏", compact) },
+                label = "收藏",
+                compact = compact,
+                onClick = { navController.navigate(Screen.Favorite.route) }
+            )
+            QuickAction(
+                icon = { QuickActionIcon(Icons.Default.Settings, "设置", compact) },
+                label = "设置",
+                compact = compact,
+                onClick = { navController.navigate(Screen.Settings.route) }
+            )
+        }
     }
+}
+
+@Composable
+private fun QuickActionIcon(
+    imageVector: ImageVector,
+    contentDescription: String,
+    compact: Boolean
+) {
+    Icon(
+        imageVector = imageVector,
+        contentDescription = contentDescription,
+        tint = Color.White,
+        modifier = Modifier.size(if (compact) 18.dp else 24.dp)
+    )
 }
 
 @OptIn(ExperimentalTvMaterial3Api::class)
@@ -332,23 +373,25 @@ private fun QuickAction(
     icon: @Composable () -> Unit,
     label: String,
     compact: Boolean,
+    modifier: Modifier = Modifier,
     onClick: () -> Unit
 ) {
     TvSurface(
-        onClick = onClick
+        onClick = onClick,
+        modifier = modifier
     ) {
         Row(
             modifier = Modifier.padding(
-                horizontal = if (compact) 12.dp else 14.dp,
-                vertical = if (compact) 8.dp else 10.dp
+                horizontal = if (compact) 7.dp else 14.dp,
+                vertical = if (compact) 7.dp else 10.dp
             ),
             verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(if (compact) 8.dp else 10.dp)
+            horizontalArrangement = Arrangement.spacedBy(if (compact) 4.dp else 10.dp)
         ) {
             icon()
             Text(
                 text = label,
-                fontSize = if (compact) 12.sp else 13.sp,
+                fontSize = if (compact) 11.sp else 13.sp,
                 color = AppTextPrimary,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis
@@ -361,6 +404,9 @@ private fun QuickAction(
 @Composable
 internal fun HomeContentSection(
     tabs: List<Category>,
+    filters: Map<String, List<Filter>>,
+    selectedFilters: Map<String, String>,
+    filterPanelVisible: Boolean,
     selectedTabIndex: Int,
     currentSite: SiteConfig?,
     compact: Boolean,
@@ -369,12 +415,15 @@ internal fun HomeContentSection(
     onRetry: () -> Unit,
     onTabFocused: ((Int) -> Unit)? = null,
     onTabSelected: (Int) -> Unit,
+    onFilterSelected: (String, String) -> Unit,
     navController: NavController
 ) {
     Column(modifier = Modifier.fillMaxSize()) {
         if (tabs.isNotEmpty()) {
             HomeTabsRow(
-                items = tabs.map { it.name.ifBlank { "未命名分类" } },
+                tabs = tabs,
+                filters = filters,
+                filterPanelVisible = filterPanelVisible,
                 selectedIndex = selectedTabIndex,
                 onFocusSelect = onTabFocused,
                 onSelect = onTabSelected,
@@ -396,13 +445,26 @@ internal fun HomeContentSection(
                 onRetry = onRetry,
                 navController = navController
             )
+
+            if (filterPanelVisible) {
+                Box(modifier = Modifier.align(Alignment.TopCenter)) {
+                    HomeFilterPanel(
+                        filters = filters[tabs.getOrNull(selectedTabIndex)?.id].orEmpty(),
+                        selectedFilters = selectedFilters,
+                        compact = compact,
+                        onFilterSelected = onFilterSelected
+                    )
+                }
+            }
         }
     }
 }
 
 @Composable
 private fun HomeTabsRow(
-    items: List<String>,
+    tabs: List<Category>,
+    filters: Map<String, List<Filter>>,
+    filterPanelVisible: Boolean,
     selectedIndex: Int,
     onFocusSelect: ((Int) -> Unit)?,
     onSelect: (Int) -> Unit,
@@ -411,9 +473,9 @@ private fun HomeTabsRow(
     val listState = rememberLazyListState()
     val isTv = currentDeviceClass() == DeviceClass.TV
 
-    LaunchedEffect(selectedIndex, items.size) {
-        if (items.isNotEmpty()) {
-            listState.animateScrollToItem(selectedIndex.coerceIn(0, items.lastIndex))
+    LaunchedEffect(selectedIndex, tabs.size) {
+        if (tabs.isNotEmpty()) {
+            listState.animateScrollToItem(selectedIndex.coerceIn(0, tabs.lastIndex))
         }
     }
 
@@ -426,10 +488,12 @@ private fun HomeTabsRow(
         horizontalArrangement = Arrangement.spacedBy(6.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        itemsIndexed(items) { index, item ->
+        itemsIndexed(tabs) { index, tab ->
             HomeTabChip(
-                text = item,
+                text = tab.name,
                 selected = index == selectedIndex,
+                hasFilters = filters[tab.id].orEmpty().isNotEmpty(),
+                filterActive = index == selectedIndex && filterPanelVisible,
                 onFocused = {
                     if (isTv && index != selectedIndex) {
                         onFocusSelect?.invoke(index)
@@ -445,6 +509,8 @@ private fun HomeTabsRow(
 private fun HomeTabChip(
     text: String,
     selected: Boolean,
+    hasFilters: Boolean,
+    filterActive: Boolean,
     onFocused: () -> Unit,
     onClick: () -> Unit
 ) {
@@ -466,26 +532,136 @@ private fun HomeTabChip(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(6.dp)
         ) {
-            if (selected) {
-                Box(
-                    modifier = Modifier
-                        .clip(RoundedCornerShape(999.dp))
-                        .background(BrandPrimary)
-                        .padding(horizontal = 5.dp, vertical = 2.dp)
-                ) {
-                    Text(
-                        text = "当前",
-                        color = Color.White,
-                        fontSize = 9.sp,
-                        fontWeight = FontWeight.Bold
-                    )
-                }
-            }
-
             Text(
                 text = text.ifBlank { "未命名分类" },
                 color = if (selected) Color.White else AppTextPrimary,
                 fontSize = 12.sp,
+                fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+            if (hasFilters) {
+                FilterGlyph(
+                    color = if (filterActive) BrandPrimary else AppTextMuted,
+                    modifier = Modifier.size(15.dp)
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun FilterGlyph(
+    color: Color,
+    modifier: Modifier = Modifier
+) {
+    Canvas(modifier = modifier) {
+        val stroke = Stroke(width = size.minDimension * 0.12f, cap = StrokeCap.Round)
+        val left = size.width * 0.18f
+        val right = size.width * 0.82f
+        val rows = listOf(
+            size.height * 0.28f to size.width * 0.38f,
+            size.height * 0.50f to size.width * 0.62f,
+            size.height * 0.72f to size.width * 0.48f
+        )
+        rows.forEach { (y, knobX) ->
+            drawLine(color, androidx.compose.ui.geometry.Offset(left, y), androidx.compose.ui.geometry.Offset(right, y), strokeWidth = stroke.width, cap = StrokeCap.Round)
+            drawCircle(color, radius = size.minDimension * 0.11f, center = androidx.compose.ui.geometry.Offset(knobX, y))
+        }
+    }
+}
+
+@Composable
+private fun HomeFilterPanel(
+    filters: List<Filter>,
+    selectedFilters: Map<String, String>,
+    compact: Boolean,
+    onFilterSelected: (String, String) -> Unit,
+    modifier: Modifier = Modifier
+) {
+    if (filters.isEmpty()) return
+
+    Column(
+        modifier = modifier
+            .fillMaxWidth()
+            .shadow(16.dp, RoundedCornerShape(12.dp), clip = false)
+            .clip(RoundedCornerShape(12.dp))
+            .background(AppSurface.copy(alpha = 0.96f))
+            .border(1.dp, Color.White.copy(alpha = 0.14f), RoundedCornerShape(12.dp))
+            .padding(horizontal = if (compact) 10.dp else 14.dp, vertical = if (compact) 10.dp else 12.dp),
+        verticalArrangement = Arrangement.spacedBy(if (compact) 8.dp else 10.dp)
+    ) {
+        filters.forEach { filter ->
+            FilterRow(
+                filter = filter,
+                selectedValue = selectedFilters[filter.key].orEmpty(),
+                compact = compact,
+                onFilterSelected = onFilterSelected
+            )
+        }
+    }
+}
+
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun FilterRow(
+    filter: Filter,
+    selectedValue: String,
+    compact: Boolean,
+    onFilterSelected: (String, String) -> Unit
+) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(if (compact) 8.dp else 12.dp),
+        verticalAlignment = Alignment.Top
+    ) {
+        Text(
+            text = filter.name,
+            color = AppTextMuted,
+            fontSize = if (compact) 11.sp else 12.sp,
+            fontWeight = FontWeight.SemiBold,
+            modifier = Modifier
+                .width(if (compact) 34.dp else 42.dp)
+                .padding(top = 7.dp),
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis
+        )
+        FlowRow(
+            modifier = Modifier.weight(1f),
+            horizontalArrangement = Arrangement.spacedBy(6.dp),
+            verticalArrangement = Arrangement.spacedBy(6.dp)
+        ) {
+            filter.value.forEach { value ->
+                FilterChip(
+                    value = value,
+                    selected = selectedValue == value.v,
+                    compact = compact,
+                    onClick = { onFilterSelected(filter.key, value.v) }
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun FilterChip(
+    value: FilterValue,
+    selected: Boolean,
+    compact: Boolean,
+    onClick: () -> Unit
+) {
+    TvSurface(onClick = onClick) {
+        Box(
+            modifier = Modifier
+                .clip(RoundedCornerShape(999.dp))
+                .background(if (selected) BrandPrimary.copy(alpha = 0.95f) else Color.White.copy(alpha = 0.05f))
+                .padding(horizontal = if (compact) 10.dp else 12.dp, vertical = if (compact) 6.dp else 7.dp),
+            contentAlignment = Alignment.Center
+        ) {
+            Text(
+                text = value.n,
+                color = if (selected) Color.White else AppTextPrimary,
+                fontSize = if (compact) 11.sp else 12.sp,
                 fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis

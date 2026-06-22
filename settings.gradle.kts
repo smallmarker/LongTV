@@ -24,3 +24,4 @@ dependencyResolutionManagement {
 rootProject.name = "LongTV"
 include(":app")
 include(":spider")
+include(":player")

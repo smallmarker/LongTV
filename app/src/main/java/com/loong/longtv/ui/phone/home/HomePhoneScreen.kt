@@ -38,7 +38,8 @@ fun HomePhoneScreen(
             compact = true,
             phoneLayout = true,
             onRetry = viewModel::refresh,
-            onTabSelected = viewModel::selectTab
+            onTabSelected = viewModel::selectTab,
+            onFilterSelected = viewModel::selectFilter
         )
     }
 }

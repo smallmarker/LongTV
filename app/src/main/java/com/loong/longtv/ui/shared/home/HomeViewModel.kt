@@ -10,6 +10,7 @@ import com.loong.longtv.data.SourcePreference
 import com.loong.longtv.di.DefaultSources
 import com.loong.longtv.engine.TvBoxEngine
 import com.loong.longtv.engine.source.model.Category
+import com.loong.longtv.engine.source.model.Filter
 import com.loong.longtv.engine.source.model.HomeContent
 import com.loong.longtv.engine.source.model.SiteConfig
 import com.loong.longtv.engine.source.model.VodInfo
@@ -79,9 +80,27 @@ class HomeViewModel @Inject constructor(
         val site = state.currentSite ?: return
         val tab = state.tabs[index]
         if (index == state.selectedTabIndex) {
-            refreshPager(site, tab, index)
+            toggleFilters(tab.id)
         } else {
             showCachedTabOrCreate(site, tab, index)
+        }
+    }
+
+    fun selectFilter(key: String, value: String) {
+        val state = _uiState.value
+        val site = state.currentSite ?: return
+        val tab = state.tabs.getOrNull(state.selectedTabIndex) ?: return
+        val nextFilters = state.selectedFilters.toMutableMap().apply {
+            if (value.isBlank()) remove(key) else put(key, value)
+        }
+        val flow = createPagerFlow(site, tab, nextFilters)
+        pagerCache[tab.cacheKey(site, nextFilters)] = flow
+        _uiState.update {
+            it.copy(
+                selectedFilters = nextFilters,
+                videoPagingFlow = flow,
+                errorMessage = null
+            )
         }
     }
 
@@ -93,6 +112,12 @@ class HomeViewModel @Inject constructor(
         showCachedTabOrCreate(site, state.tabs[index], index)
     }
 
+    fun toggleFilters() {
+        val state = _uiState.value
+        val tab = state.tabs.getOrNull(state.selectedTabIndex) ?: return
+        toggleFilters(tab.id)
+    }
+
     private fun loadSite(site: SiteConfig) {
         viewModelScope.launch {
             pagerCache.clear()
@@ -101,6 +126,9 @@ class HomeViewModel @Inject constructor(
                     currentSite = site,
                     loading = true,
                     videoPagingFlow = emptyFlow(),
+                    filterPanelVisible = false,
+                    selectedFilters = emptyMap(),
+                    filters = emptyMap(),
                     errorMessage = null
                 )
             }
@@ -114,6 +142,9 @@ class HomeViewModel @Inject constructor(
                         loading = false,
                         tabs = tabs,
                         selectedTabIndex = 0,
+                        filters = homeContent.filters,
+                        filterPanelVisible = false,
+                        selectedFilters = emptyMap(),
                         errorMessage = null
                     )
                 }
@@ -127,6 +158,9 @@ class HomeViewModel @Inject constructor(
                         tabs = emptyList(),
                         selectedTabIndex = 0,
                         videoPagingFlow = emptyFlow(),
+                        filterPanelVisible = false,
+                        selectedFilters = emptyMap(),
+                        filters = emptyMap(),
                         errorMessage = result.exceptionOrNull()?.message ?: "加载失败"
                     )
                 }
@@ -135,31 +169,34 @@ class HomeViewModel @Inject constructor(
     }
 
     private fun showCachedTabOrCreate(site: SiteConfig, tab: Category, index: Int) {
-        val flow = pagerCache.getOrPut(tab.cacheKey(site)) {
-            createPagerFlow(site, tab)
+        val flow = pagerCache.getOrPut(tab.cacheKey(site, emptyMap())) {
+            createPagerFlow(site, tab, emptyMap())
         }
         _uiState.update {
             it.copy(
                 selectedTabIndex = index,
                 videoPagingFlow = flow,
+                filterPanelVisible = false,
+                selectedFilters = emptyMap(),
                 errorMessage = null
             )
         }
     }
 
-    private fun refreshPager(site: SiteConfig, tab: Category, index: Int) {
-        val flow = createPagerFlow(site, tab)
-        pagerCache[tab.cacheKey(site)] = flow
+    private fun toggleFilters(tabId: String) {
+        val hasFilters = _uiState.value.filters[tabId].orEmpty().isNotEmpty()
         _uiState.update {
             it.copy(
-                selectedTabIndex = index,
-                videoPagingFlow = flow,
-                errorMessage = null
+                filterPanelVisible = if (hasFilters) !it.filterPanelVisible else false
             )
         }
     }
 
-    private fun createPagerFlow(site: SiteConfig, tab: Category): Flow<PagingData<VodInfo>> {
+    private fun createPagerFlow(
+        site: SiteConfig,
+        tab: Category,
+        filters: Map<String, String>
+    ): Flow<PagingData<VodInfo>> {
         return Pager(
             config = PagingConfig(
                 pageSize = 20,
@@ -171,6 +208,7 @@ class HomeViewModel @Inject constructor(
                 HomePagingSource(
                     site = site,
                     tab = tab,
+                    filters = filters,
                     engine = engine,
                     homeTabId = HOME_TAB_ID
                 )
@@ -185,7 +223,10 @@ class HomeViewModel @Inject constructor(
         }.distinctBy { it.id }
     }
 
-    private fun Category.cacheKey(site: SiteConfig): String = "${site.key}:${id}"
+    private fun Category.cacheKey(site: SiteConfig, filters: Map<String, String>): String {
+        val filterKey = filters.toSortedMap().entries.joinToString("&") { "${it.key}=${it.value}" }
+        return "${site.key}:${id}:$filterKey"
+    }
 
     companion object {
         private const val HOME_TAB_ID = "__home__"
@@ -196,6 +237,9 @@ data class HomeUiState(
     val sites: List<SiteConfig> = emptyList(),
     val currentSite: SiteConfig? = null,
     val tabs: List<Category> = emptyList(),
+    val filters: Map<String, List<Filter>> = emptyMap(),
+    val selectedFilters: Map<String, String> = emptyMap(),
+    val filterPanelVisible: Boolean = false,
     val selectedTabIndex: Int = 0,
     val loading: Boolean = false,
     val videoPagingFlow: Flow<PagingData<VodInfo>> = emptyFlow(),

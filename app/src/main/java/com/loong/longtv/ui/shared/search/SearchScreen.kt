@@ -130,7 +130,7 @@ private fun TvSearchInputPanel(
 
         BasicTextField(
             value = keyword,
-            onValueChange = onKeywordChange,
+            onValueChange = { onKeywordChange(it.toSingleLineSearchInput()) },
             modifier = Modifier
                 .fillMaxWidth()
                 .height(42.dp)
@@ -163,12 +163,19 @@ private fun TvSearchInputPanel(
                 onSearch = { onSearch(keyword.trim()) }
             ),
             decorationBox = { innerTextField ->
-                Box(contentAlignment = Alignment.CenterStart) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(42.dp),
+                    contentAlignment = Alignment.CenterStart
+                ) {
                     if (keyword.isBlank()) {
                         Text(
                             text = "输入片名、演员、导演或拼音字母",
                             color = AppTextMuted,
-                            fontSize = 13.sp
+                            fontSize = 13.sp,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
                         )
                     }
                     innerTextField()
@@ -228,7 +235,7 @@ private fun TvSearchInputPanel(
                 .fillMaxWidth()
                 .height(296.dp)
         ) { key ->
-            onKeywordChange(keyword + key)
+            onKeywordChange((keyword + key).toSingleLineSearchInput())
         }
     }
 }
@@ -622,8 +629,10 @@ private fun PhoneSearchBar(
                 )
                 BasicTextField(
                     value = keyword,
-                    onValueChange = onKeywordChange,
-                    modifier = Modifier.weight(1f),
+                    onValueChange = { onKeywordChange(it.toSingleLineSearchInput()) },
+                    modifier = Modifier
+                        .weight(1f)
+                        .height(24.dp),
                     textStyle = TextStyle(
                         color = AppTextPrimary,
                         fontSize = 15.sp,
@@ -637,12 +646,17 @@ private fun PhoneSearchBar(
                         onSearch = { onSearch(keyword.trim()) }
                     ),
                     decorationBox = { innerTextField ->
-                        Box(contentAlignment = Alignment.CenterStart) {
+                        Box(
+                            modifier = Modifier.fillMaxWidth(),
+                            contentAlignment = Alignment.CenterStart
+                        ) {
                             if (keyword.isBlank()) {
                                 Text(
                                     text = "搜索电影、电视剧、综艺...",
                                     color = AppTextMuted,
-                                    fontSize = 15.sp
+                                    fontSize = 15.sp,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis
                                 )
                             }
                             innerTextField()
@@ -1048,6 +1062,9 @@ private fun hotLabelFor(rank: Int): String {
         else -> "UP"
     }
 }
+
+private fun String.toSingleLineSearchInput(): String =
+    replace('\r', ' ').replace('\n', ' ')
 
 @Composable
 private fun SearchEmptyHint(

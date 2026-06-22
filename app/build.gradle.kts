@@ -101,6 +101,7 @@ tasks.matching { it.name == "assembleRelease" }.configureEach {
 
 dependencies {
     implementation(project(":spider"))
+    implementation(project(":player"))
 
     testImplementation(libs.junit)
     androidTestImplementation(libs.androidx.junit)

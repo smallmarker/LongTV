@@ -86,15 +86,39 @@ class AppRJ : Spider() {
             val list = JSONObject(json).optJSONObject("data")?.optJSONArray("list")
                 ?: return emptyHomeContent()
             val classes = mutableListOf<Map<String, String>>()
+            val filters = mutableMapOf<String, List<Map<String, Any>>>()
             for (i in 0 until list.length()) {
                 val item = list.optJSONObject(i) ?: continue
+                val typeId = item.optString("type_id")
                 classes.add(mapOf(
-                    "type_id" to item.optString("type_id"),
+                    "type_id" to typeId,
                     "type_name" to item.optString("type_name")
                 ))
+                val tabFilters = buildList {
+                    addFilter("class", "类型", item.optJSONArray("extend"))
+                    addFilter("area", "地区", item.optJSONArray("area"))
+                    addFilter("lang", "语言", item.optJSONArray("lang"))
+                    addFilter("year", "年份", item.optJSONArray("year"))
+                }
+                if (typeId.isNotBlank() && tabFilters.isNotEmpty()) {
+                    filters[typeId] = tabFilters
+                }
             }
-            gson.toJson(mapOf("class" to classes))
+            gson.toJson(mapOf("class" to classes, "filters" to filters))
         }.onFailure { Log.e(TAG, "homeContent parse error", it) }.getOrDefault(emptyHomeContent())
+    }
+
+    private fun MutableList<Map<String, Any>>.addFilter(key: String, name: String, values: org.json.JSONArray?) {
+        if (values == null || values.length() == 0) return
+        val items = mutableListOf<Map<String, String>>()
+        for (i in 0 until values.length()) {
+            val label = values.optString(i).trim()
+            if (label.isBlank()) continue
+            items.add(mapOf("n" to label, "v" to if (label == "全部") "" else label))
+        }
+        if (items.size > 1) {
+            add(mapOf("key" to key, "name" to name, "value" to items.distinctBy { it["v"] }))
+        }
     }
 
     override fun categoryContent(
@@ -196,7 +220,7 @@ class AppRJ : Spider() {
         return gson.toJson(mapOf("parse" to 0, "url" to id))
     }
 
-    private fun emptyHomeContent() = gson.toJson(mapOf("class" to emptyList<Any>()))
+    private fun emptyHomeContent() = gson.toJson(mapOf("class" to emptyList<Any>(), "filters" to emptyMap<String, Any>()))
     private fun emptyListResult() =
         gson.toJson(mapOf("page" to 1, "pagecount" to 0, "limit" to 20, "total" to 0, "list" to emptyList<Any>()))
 }

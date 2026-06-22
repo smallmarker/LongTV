@@ -3,7 +3,6 @@ package com.loong.longtv.engine.spider
 import android.content.Context
 import android.util.Log
 import com.github.catvod.crawler.Spider
-import com.loong.longtv.engine.config.ConfigManager
 import com.loong.longtv.engine.source.model.SiteConfig
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.sync.Mutex
@@ -16,30 +15,25 @@ import java.util.concurrent.ConcurrentHashMap
  *
  * 职责：
  * 1. 接收ConfigManager加载的配置
- * 2. 使用SpiderLoader加载Jar
- * 3. 按需创建/缓存Spider实例
- * 4. 管理Spider的init/destroy生命周期
+ * 2. 按需创建/缓存内置Spider实例
+ * 3. 管理Spider的init/destroy生命周期
  */
 class SpiderManager(
-    private val context: Context,
-    private val configManager: ConfigManager
+    private val context: Context
 ) {
     private val loader = SpiderLoader(context)
     private val spiderCache = ConcurrentHashMap<String, Spider>()
     private val initMutex = Mutex()
 
     /**
-     * 初始化Spider引擎 - 加载Jar
+     * 初始化Spider引擎。
+     *
+     * 项目只使用随应用打包的本地Spider，不加载外部Jar。
      * 应在配置加载成功后调用
      */
     suspend fun initialize(): Boolean = withContext(Dispatchers.IO) {
         initMutex.withLock {
-            val jarFile = configManager.resolveSpiderJar()
-            if (jarFile == null) {
-                Log.w(TAG, "No spider jar configured")
-                return@withContext false
-            }
-            loader.loadJar(jarFile)
+            true
         }
     }
 
@@ -54,10 +48,6 @@ class SpiderManager(
         }
 
         spiderCache[site.key]?.let { return@withContext it }
-
-        if (!loader.isLoaded()) {
-            initialize()
-        }
 
         val className = site.spiderClassName()
         val spider = loader.createSpider(className) ?: run {

@@ -32,7 +32,8 @@ fun HomeTvScreen(
             phoneLayout = false,
             onRetry = viewModel::refresh,
             onTabFocused = viewModel::focusTab,
-            onTabSelected = viewModel::selectTab
+            onTabSelected = viewModel::selectTab,
+            onFilterSelected = viewModel::selectFilter
         )
     }
 }

@@ -43,7 +43,7 @@ fun VideoDetailPhoneScreen(
         key = key,
         id = id,
         viewModel = viewModel
-    ) { state, detail, sources, selectedSource, playableMedia, onOpenFullscreen, onProgressChanged, onToggleFavorite, onPlayCurrent, onRetryCurrent, onClearError, onSelectSource, onSelectEpisode ->
+    ) { state, detail, sources, selectedSource, playableMedia, openingFullscreen, onOpenFullscreen, onProgressChanged, onToggleFavorite, onPlayCurrent, onRetryCurrent, onClearError, onSelectSource, onSelectEpisode ->
         VideoDetailPhoneContent(
             navigator = navigator,
             state = state,
@@ -51,6 +51,7 @@ fun VideoDetailPhoneScreen(
             sources = sources,
             selectedSource = selectedSource,
             playableMedia = playableMedia,
+            openingFullscreen = openingFullscreen,
             onOpenFullscreen = onOpenFullscreen,
             onProgressChanged = onProgressChanged,
             onToggleFavorite = onToggleFavorite,
@@ -71,6 +72,7 @@ internal fun VideoDetailPhoneContent(
     sources: List<PlayLine>,
     selectedSource: PlayLine?,
     playableMedia: PlayableMedia?,
+    openingFullscreen: Boolean,
     onOpenFullscreen: (PlayableMedia, String) -> Unit,
     onProgressChanged: (Long, Long) -> Unit,
     onToggleFavorite: () -> Unit,
@@ -113,6 +115,7 @@ internal fun VideoDetailPhoneContent(
                 resumePositionMs = state.resumePositionMs,
                 selectedSource = selectedSource,
                 selectedEpisodeIndex = state.selectedEpisodeIndex,
+                sharedSessionReleaseDelayMs = if (openingFullscreen) 5_000L else 0L,
                 onBack = { navigator.popBackStack() },
                 onOpenFullscreen = onOpenFullscreen,
                 onProgressChanged = onProgressChanged

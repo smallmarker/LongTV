@@ -1,6 +1,7 @@
 package com.loong.longtv.data
 
 import android.content.Context
+import com.loong.longtv.di.DefaultSources
 import com.loong.longtv.engine.config.ConfigSource
 
 private const val PREFS_NAME = "longtv_source_prefs"
@@ -15,8 +16,6 @@ class SourcePreference(context: Context) {
     fun save(source: ConfigSource) {
         val (type, data) = when (source) {
             is ConfigSource.Asset -> "asset" to source.assetPath
-            is ConfigSource.Remote -> "remote" to source.url
-            is ConfigSource.Local -> "local" to source.filePath
         }
         prefs.edit()
             .putString(KEY_TYPE, type)
@@ -31,9 +30,7 @@ class SourcePreference(context: Context) {
         val data = prefs.getString(KEY_DATA, null) ?: return null
         return when (type) {
             "asset" -> ConfigSource.Asset(name = name, assetPath = data)
-            "remote" -> ConfigSource.Remote(name = name, url = data)
-            "local" -> ConfigSource.Local(name = name, filePath = data)
-            else -> null
+            else -> DefaultSources.default
         }
     }
 }

@@ -10,6 +10,7 @@ import com.loong.longtv.engine.source.model.VodInfo
 class HomePagingSource(
     private val site: SiteConfig,
     private val tab: Category,
+    private val filters: Map<String, String>,
     private val engine: TvBoxEngine,
     private val homeTabId: String
 ) : PagingSource<Int, VodInfo>() {
@@ -18,7 +19,7 @@ class HomePagingSource(
         val page = params.key ?: 1
         // 首页 tab 使用 categoryId="0"，与其他分类加载方式一致
         val categoryId = if (tab.id == homeTabId) "0" else tab.id
-        val result = engine.sourceRepository.getCategoryContent(site, categoryId, page)
+        val result = engine.sourceRepository.getCategoryContent(site, categoryId, page, HashMap(filters))
 
         return if (result.isSuccess) {
             val content = result.getOrThrow()

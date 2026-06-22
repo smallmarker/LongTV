@@ -10,14 +10,13 @@ import com.loong.longtv.engine.source.model.LiveConfig
 import com.loong.longtv.engine.source.model.ParseConfig
 import com.loong.longtv.engine.source.model.SiteConfig
 import com.loong.longtv.engine.source.model.TvBoxConfig
-import java.io.File
 import java.io.InputStream
 
 /**
  * 配置解析器 - 解析TVBox格式的JSON配置
  *
  * 负责：
- * 1. 从不同来源(asset/file/stream)读取JSON
+ * 1. 从内置asset读取JSON
  * 2. 解析为TvBoxConfig对象
  * 3. 处理相对路径（如 ./spider.jar → 绝对路径）
  */
@@ -29,22 +28,6 @@ class ConfigParser(private val gson: Gson = Gson()) {
     fun parseFromAsset(context: Context, assetPath: String): TvBoxConfig {
         val json = context.assets.open("$assetPath/api.json").bufferedReader().use { it.readText() }
         return parseJson(json, resolveBase = "asset://$assetPath")
-    }
-
-    /**
-     * 从本地文件解析配置
-     */
-    fun parseFromFile(file: File): TvBoxConfig {
-        val json = file.readText()
-        val baseDir = file.parentFile?.absolutePath ?: ""
-        return parseJson(json, resolveBase = baseDir)
-    }
-
-    /**
-     * 从远程JSON字符串解析配置
-     */
-    fun parseFromRemote(json: String, baseUrl: String): TvBoxConfig {
-        return parseJson(json, resolveBase = baseUrl)
     }
 
     /**

@@ -106,9 +106,7 @@ private fun ConfigSourceCard(
     onSwitch: () -> Unit
 ) {
     val (label, desc) = when (source) {
-        is ConfigSource.Asset -> Pair("本地内置（${source.assetPath}）", "使用应用内置的饭太硬配置包")
-        is ConfigSource.Remote -> Pair("在线源（${source.url}）", "从网络拉取最新配置，需要网络权限")
-        is ConfigSource.Local -> Pair("本地文件（${source.filePath}）", "从设备存储加载自定义配置")
+        is ConfigSource.Asset -> Pair("本地内置（${source.assetPath}）", "使用应用内置配置和本地Spider")
     }
 
     Box(

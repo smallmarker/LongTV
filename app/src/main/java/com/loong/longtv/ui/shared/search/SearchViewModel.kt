@@ -11,6 +11,7 @@ import com.loong.longtv.engine.source.model.VodInfo
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
@@ -22,6 +23,7 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.supervisorScope
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeoutOrNull
 import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 import okhttp3.OkHttpClient
 import okhttp3.Request
@@ -176,7 +178,10 @@ class SearchViewModel @Inject constructor(
 
     private fun refreshHotKeywords() {
         viewModelScope.launch {
-            val hot = loadTencentHotKeywords()
+            val hot = (loadTencentHotKeywords() + loadSpiderHotKeywords())
+                .mapNotNull { it.normalizeKeyword().takeIf(String::isNotBlank) }
+                .distinct()
+                .take(MAX_HOT_KEYWORDS)
             _hotKeywords.value = hot
             updateSearchState(history.value)
         }
@@ -201,6 +206,37 @@ class SearchViewModel @Inject constructor(
                     .filter { it.isNotBlank() }.distinct().take(12)
             }
         }.getOrElse { emptyList() }
+    }
+
+    private suspend fun loadSpiderHotKeywords(): List<String> = supervisorScope {
+        val sites = engine.currentConfig?.sites
+            ?.filter { it.isSpiderSite() && it.isSearchable() }
+            .orEmpty()
+            .take(MAX_HOT_SPIDER_SITES)
+
+        sites.map { site ->
+            async {
+                withTimeoutOrNull(SPIDER_HOT_TIMEOUT_MS) {
+                    val homeVideos = engine.sourceRepository.getHomeVideos(site)
+                        .getOrNull()
+                        ?.list
+                        .orEmpty()
+
+                    val categoryVideos = if (homeVideos.isEmpty()) {
+                        engine.sourceRepository.getCategoryContent(site, "0")
+                            .getOrNull()
+                            ?.list
+                            .orEmpty()
+                    } else {
+                        emptyList()
+                    }
+
+                    (homeVideos + categoryVideos)
+                        .mapNotNull { it.name.normalizeKeyword().takeIf(String::isNotBlank) }
+                        .take(MAX_HOT_KEYWORDS)
+                }.orEmpty()
+            }
+        }.awaitAll().flatten().distinct().take(MAX_HOT_KEYWORDS)
     }
 
     private suspend fun fetchTvSuggestions(keyword: String): List<String> = withContext(Dispatchers.IO) {
@@ -232,6 +268,9 @@ class SearchViewModel @Inject constructor(
 
     companion object {
         private const val TAG = "SearchViewModel"
+        private const val MAX_HOT_KEYWORDS = 16
+        private const val MAX_HOT_SPIDER_SITES = 3
+        private const val SPIDER_HOT_TIMEOUT_MS = 5_000L
     }
 }
 

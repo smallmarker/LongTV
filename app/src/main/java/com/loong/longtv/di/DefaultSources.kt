@@ -13,14 +13,8 @@ object DefaultSources {
         assetPath = "tvbox/longtv"
     )
 
-    /** 在线饭太硬 */
-    val REMOTE_FANTY = ConfigSource.Remote(
-        name = "饭太硬(在线)",
-        url = "http://www.饭太硬.cc/tv"
-    )
-
     /** 所有可用配置源 */
-    val all: List<ConfigSource> = listOf(LOCAL_LONGTV, REMOTE_FANTY)
+    val all: List<ConfigSource> = listOf(LOCAL_LONGTV)
 
     /** 默认配置源 */
     val default: ConfigSource = LOCAL_LONGTV
