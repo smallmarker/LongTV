@@ -24,6 +24,7 @@ fun TvVideoPlayerView(
     onControllerVisibilityChanged: ((Boolean) -> Unit)? = null,
     onPlaybackStateChanged: ((Int) -> Unit)? = null,
     onPlayingChanged: ((Boolean) -> Unit)? = null,
+    onPlaybackEnded: (() -> Unit)? = null,
     onPlaybackError: ((String) -> Unit)? = null,
     onSurfaceTap: (() -> Unit)? = null,
 ) {
@@ -45,6 +46,7 @@ fun TvVideoPlayerView(
         onControllerVisibilityChanged = onControllerVisibilityChanged,
         onPlaybackStateChanged = onPlaybackStateChanged,
         onPlayingChanged = onPlayingChanged,
+        onPlaybackEnded = onPlaybackEnded,
         onPlaybackError = onPlaybackError,
         onSurfaceTap = onSurfaceTap
     )

@@ -7,7 +7,6 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
@@ -29,6 +28,7 @@ import com.loong.longtv.ui.shared.settings.SettingsContent
 import com.loong.longtv.ui.shared.widgets.AppScreen
 import com.loong.longtv.ui.theme.AppTextPrimary
 import com.loong.longtv.ui.theme.AppTextSecondary
+import com.loong.longtv.ui.theme.AppThemeTokens
 
 @Composable
 fun SettingsPhoneScreen(
@@ -44,7 +44,7 @@ fun SettingsPhoneScreen(
             state = state,
             compact = true,
             phoneLayout = true,
-            onSwitchSource = viewModel::switchSource
+            onSelectPopularSite = viewModel::selectPopularSite
         )
     }
 }
@@ -62,7 +62,7 @@ private fun SettingsPhoneTopBar(
     ) {
         Row(
             modifier = Modifier
-                .clip(RoundedCornerShape(16.dp))
+                .clip(AppThemeTokens.buttonShape())
                 .clickable(onClick = onBack)
                 .padding(horizontal = 4.dp, vertical = 8.dp),
             verticalAlignment = Alignment.CenterVertically
@@ -76,7 +76,7 @@ private fun SettingsPhoneTopBar(
             Text(text = "返回", color = AppTextSecondary, fontSize = 13.sp)
         }
         Text(
-            text = "播放设置",
+            text = "设置",
             color = AppTextPrimary,
             fontSize = 22.sp,
             fontWeight = FontWeight.Bold,

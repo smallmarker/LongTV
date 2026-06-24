@@ -3,13 +3,12 @@ package com.loong.longtv.ui.tv.widgets
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.unit.dp
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.tv.material3.Button
 import androidx.tv.material3.ButtonDefaults
 import androidx.tv.material3.Text
 import com.loong.longtv.ui.theme.AppSurfaceVariant
 import com.loong.longtv.ui.theme.AppTextPrimary
+import com.loong.longtv.ui.theme.AppThemeTokens
 import com.loong.longtv.ui.theme.BrandPrimary
 import com.loong.longtv.ui.theme.BrandPrimaryDark
 
@@ -24,7 +23,7 @@ fun TvAppButton(
         onClick = onClick,
         modifier = modifier,
         enabled = enabled,
-        shape = ButtonDefaults.shape(RoundedCornerShape(14.dp)),
+        shape = ButtonDefaults.shape(AppThemeTokens.buttonShape()),
         colors = ButtonDefaults.colors(
             containerColor = BrandPrimary,
             contentColor = Color(0xFF0E1626),

@@ -25,6 +25,7 @@
         android:networkSecurityConfig="@xml/network_security_config">
         <activity
             android:name="com.loong.longtv.MainActivity"
+            android:configChanges="orientation|screenSize|keyboardHidden"
             android:exported="true">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />

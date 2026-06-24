@@ -52,6 +52,7 @@ fun ComposeVideoPlayer(
     onControllerVisibilityChanged: ((Boolean) -> Unit)? = null,
     onPlaybackStateChanged: ((Int) -> Unit)? = null,
     onPlayingChanged: ((Boolean) -> Unit)? = null,
+    onPlaybackEnded: (() -> Unit)? = null,
     onPlaybackError: ((String) -> Unit)? = null,
     onSurfaceTap: (() -> Unit)? = null,
 ) {
@@ -121,10 +122,13 @@ fun ComposeVideoPlayer(
         }
     }
 
-    DisposableEffect(player, onPlaybackError, onPlaybackStateChanged, onPlayingChanged) {
+    DisposableEffect(player, onPlaybackError, onPlaybackStateChanged, onPlayingChanged, onPlaybackEnded) {
         val listener = object : Player.Listener {
             override fun onPlaybackStateChanged(playbackState: Int) {
                 onPlaybackStateChanged?.invoke(playbackState)
+                if (playbackState == Player.STATE_ENDED) {
+                    onPlaybackEnded?.invoke()
+                }
             }
 
             override fun onIsPlayingChanged(isPlaying: Boolean) {
@@ -137,6 +141,8 @@ fun ComposeVideoPlayer(
             }
         }
         player.addListener(listener)
+        onPlaybackStateChanged?.invoke(player.playbackState)
+        onPlayingChanged?.invoke(player.isPlaying)
         onDispose {
             player.removeListener(listener)
         }

@@ -2,24 +2,21 @@ package com.loong.longtv.ui.shared.home
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import androidx.paging.Pager
-import androidx.paging.PagingConfig
-import androidx.paging.PagingData
-import androidx.paging.cachedIn
 import com.loong.longtv.data.SourcePreference
+import com.loong.longtv.data.favorite.FavoriteRepository
+import com.loong.longtv.data.history.WatchHistoryRepository
+import com.loong.longtv.data.room.entity.FavoriteEntity
+import com.loong.longtv.data.room.entity.WatchHistoryEntity
 import com.loong.longtv.di.DefaultSources
 import com.loong.longtv.engine.TvBoxEngine
-import com.loong.longtv.engine.source.model.Category
-import com.loong.longtv.engine.source.model.Filter
-import com.loong.longtv.engine.source.model.HomeContent
 import com.loong.longtv.engine.source.model.SiteConfig
 import com.loong.longtv.engine.source.model.VodInfo
 import dagger.hilt.android.lifecycle.HiltViewModel
-import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.flow.emptyFlow
+import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import javax.inject.Inject
@@ -28,220 +25,155 @@ import javax.inject.Inject
 class HomeViewModel @Inject constructor(
     private val engine: TvBoxEngine,
     private val sourcePreference: SourcePreference,
+    private val watchHistoryRepository: WatchHistoryRepository,
+    private val favoriteRepository: FavoriteRepository,
 ) : ViewModel() {
-    private val pagerCache = mutableMapOf<String, Flow<PagingData<VodInfo>>>()
-
     private val _uiState = MutableStateFlow(HomeUiState())
     val uiState: StateFlow<HomeUiState> = _uiState.asStateFlow()
 
     init {
         initEngine()
+        observeLocalLibrary()
+        observePopularSitePreference()
+    }
+
+    fun refresh() {
+        initEngine()
     }
 
     private fun initEngine() {
         viewModelScope.launch {
-            _uiState.update { it.copy(loading = true) }
+            _uiState.update { it.copy(loading = true, errorMessage = null) }
             val source = sourcePreference.load() ?: DefaultSources.default
             val result = engine.start(source)
             if (result.isSuccess) {
-                val config = result.getOrThrow()
-                val sites = config.sites.filter { it.isSpiderSite() }
-                val defaultSite = sites.firstOrNull()
-                _uiState.update {
-                    it.copy(
-                        sites = sites,
-                        currentSite = defaultSite,
-                        loading = false
+                val sites = result.getOrThrow().sites.filter { it.isSpiderSite() }
+                val site = sites.selectPopularSite(sourcePreference.loadPopularSiteKey())
+                _uiState.update { state ->
+                    state.copy(
+                        loading = false,
+                        sourceName = site?.name.orEmpty(),
+                        popularVideos = emptyList(),
+                        errorMessage = null,
                     )
                 }
-                defaultSite?.let { loadSite(it) }
+                site?.let { loadPopularVideos(it) }
             } else {
-                _uiState.update {
-                    it.copy(loading = false, errorMessage = "加载配置失败: ${result.exceptionOrNull()?.message}")
+                _uiState.update { state ->
+                    state.copy(
+                        loading = false,
+                        popularVideos = emptyList(),
+                        errorMessage = "加载播放源失败: ${result.exceptionOrNull()?.message.orEmpty()}",
+                    )
                 }
             }
         }
     }
 
-    fun refresh() {
-        val site = _uiState.value.currentSite ?: return
-        loadSite(site)
-    }
-
-    fun selectSite(siteKey: String) {
-        val site = _uiState.value.sites.firstOrNull { it.key == siteKey } ?: return
-        if (_uiState.value.currentSite?.key == site.key) return
-        loadSite(site)
-    }
-
-    fun selectTab(index: Int) {
-        val state = _uiState.value
-        if (index !in state.tabs.indices) return
-        val site = state.currentSite ?: return
-        val tab = state.tabs[index]
-        if (index == state.selectedTabIndex) {
-            toggleFilters(tab.id)
-        } else {
-            showCachedTabOrCreate(site, tab, index)
-        }
-    }
-
-    fun selectFilter(key: String, value: String) {
-        val state = _uiState.value
-        val site = state.currentSite ?: return
-        val tab = state.tabs.getOrNull(state.selectedTabIndex) ?: return
-        val nextFilters = state.selectedFilters.toMutableMap().apply {
-            if (value.isBlank()) remove(key) else put(key, value)
-        }
-        val flow = createPagerFlow(site, tab, nextFilters)
-        pagerCache[tab.cacheKey(site, nextFilters)] = flow
-        _uiState.update {
-            it.copy(
-                selectedFilters = nextFilters,
-                videoPagingFlow = flow,
-                errorMessage = null
-            )
-        }
-    }
-
-    fun focusTab(index: Int) {
-        val state = _uiState.value
-        if (index !in state.tabs.indices) return
-        if (index == state.selectedTabIndex) return
-        val site = state.currentSite ?: return
-        showCachedTabOrCreate(site, state.tabs[index], index)
-    }
-
-    fun toggleFilters() {
-        val state = _uiState.value
-        val tab = state.tabs.getOrNull(state.selectedTabIndex) ?: return
-        toggleFilters(tab.id)
-    }
-
-    private fun loadSite(site: SiteConfig) {
+    private fun loadPopularVideos(site: SiteConfig) {
         viewModelScope.launch {
-            pagerCache.clear()
-            _uiState.update {
-                it.copy(
-                    currentSite = site,
-                    loading = true,
-                    videoPagingFlow = emptyFlow(),
-                    filterPanelVisible = false,
-                    selectedFilters = emptyMap(),
-                    filters = emptyMap(),
-                    errorMessage = null
-                )
-            }
+            val result = engine.sourceRepository.getHomeVideos(site)
+            val videos = result.getOrNull()?.list.orEmpty().ifEmpty {
+                engine.sourceRepository.getCategoryContent(site, "0")
+                    .getOrNull()
+                    ?.list
+                    .orEmpty()
+            }.take(MAX_MEDIA_ITEMS).map { it.also { video -> video.siteKey = site.key } }
+            _uiState.update { it.copy(popularVideos = videos) }
+        }
+    }
 
-            val result = engine.sourceRepository.getHomeContent(site)
-            if (result.isSuccess) {
-                val homeContent = result.getOrThrow()
-                val tabs = buildTabs(homeContent)
+    private fun observePopularSitePreference() {
+        viewModelScope.launch {
+            sourcePreference.popularSiteKey.drop(1).collect { siteKey ->
+                val site = engine.currentConfig?.sites
+                    ?.filter { it.isSpiderSite() }
+                    ?.selectPopularSite(siteKey)
+                    ?: return@collect
+                _uiState.update { it.copy(popularVideos = emptyList(), sourceName = site.name) }
+                loadPopularVideos(site)
+            }
+        }
+    }
+
+    private fun List<SiteConfig>.selectPopularSite(siteKey: String?): SiteConfig? {
+        return firstOrNull { it.key == siteKey } ?: firstOrNull()
+    }
+
+    private fun observeLocalLibrary() {
+        viewModelScope.launch {
+            combine(
+                watchHistoryRepository.recent(),
+                favoriteRepository.all()
+            ) { histories, favorites ->
+                HomeLibraryState(
+                    recentWatching = histories.take(MAX_MEDIA_ITEMS).map { it.toHomeMediaItem() },
+                    favorites = favorites.take(MAX_MEDIA_ITEMS).map { it.toHomeMediaItem() }
+                )
+            }.collect { library ->
                 _uiState.update {
                     it.copy(
-                        loading = false,
-                        tabs = tabs,
-                        selectedTabIndex = 0,
-                        filters = homeContent.filters,
-                        filterPanelVisible = false,
-                        selectedFilters = emptyMap(),
-                        errorMessage = null
-                    )
-                }
-                tabs.firstOrNull()?.let { tab ->
-                    showCachedTabOrCreate(site, tab, 0)
-                }
-            } else {
-                _uiState.update {
-                    it.copy(
-                        loading = false,
-                        tabs = emptyList(),
-                        selectedTabIndex = 0,
-                        videoPagingFlow = emptyFlow(),
-                        filterPanelVisible = false,
-                        selectedFilters = emptyMap(),
-                        filters = emptyMap(),
-                        errorMessage = result.exceptionOrNull()?.message ?: "加载失败"
+                        recentWatching = library.recentWatching,
+                        favorites = library.favorites
                     )
                 }
             }
         }
     }
 
-    private fun showCachedTabOrCreate(site: SiteConfig, tab: Category, index: Int) {
-        val flow = pagerCache.getOrPut(tab.cacheKey(site, emptyMap())) {
-            createPagerFlow(site, tab, emptyMap())
-        }
-        _uiState.update {
-            it.copy(
-                selectedTabIndex = index,
-                videoPagingFlow = flow,
-                filterPanelVisible = false,
-                selectedFilters = emptyMap(),
-                errorMessage = null
-            )
-        }
+    private fun WatchHistoryEntity.toHomeMediaItem(): HomeMediaItem {
+        return HomeMediaItem(
+            siteKey = siteKey,
+            videoId = videoId,
+            title = title,
+            cover = cover,
+            meta = listOf(episodeName, positionMs.formatPlaybackPosition())
+                .filter { it.isNotBlank() }
+                .joinToString(" ")
+        )
     }
 
-    private fun toggleFilters(tabId: String) {
-        val hasFilters = _uiState.value.filters[tabId].orEmpty().isNotEmpty()
-        _uiState.update {
-            it.copy(
-                filterPanelVisible = if (hasFilters) !it.filterPanelVisible else false
-            )
-        }
+    private fun FavoriteEntity.toHomeMediaItem(): HomeMediaItem {
+        return HomeMediaItem(
+            siteKey = siteKey,
+            videoId = videoId,
+            title = title,
+            cover = cover,
+            meta = "已收藏"
+        )
     }
 
-    private fun createPagerFlow(
-        site: SiteConfig,
-        tab: Category,
-        filters: Map<String, String>
-    ): Flow<PagingData<VodInfo>> {
-        return Pager(
-            config = PagingConfig(
-                pageSize = 20,
-                initialLoadSize = 20,
-                prefetchDistance = 4,
-                enablePlaceholders = false
-            ),
-            pagingSourceFactory = {
-                HomePagingSource(
-                    site = site,
-                    tab = tab,
-                    filters = filters,
-                    engine = engine,
-                    homeTabId = HOME_TAB_ID
-                )
-            }
-        ).flow.cachedIn(viewModelScope)
-    }
-
-    private fun buildTabs(homeContent: HomeContent?): List<Category> {
-        return buildList {
-            add(Category(HOME_TAB_ID, "首页"))
-            addAll(homeContent?.categories.orEmpty())
-        }.distinctBy { it.id }
-    }
-
-    private fun Category.cacheKey(site: SiteConfig, filters: Map<String, String>): String {
-        val filterKey = filters.toSortedMap().entries.joinToString("&") { "${it.key}=${it.value}" }
-        return "${site.key}:${id}:$filterKey"
+    private fun Long.formatPlaybackPosition(): String {
+        if (this <= 0L) return ""
+        val totalSeconds = this / 1000L
+        val minutes = totalSeconds / 60L
+        val seconds = totalSeconds % 60L
+        return "%02d:%02d".format(minutes, seconds)
     }
 
     companion object {
-        private const val HOME_TAB_ID = "__home__"
+        private const val MAX_MEDIA_ITEMS = 8
     }
 }
 
 data class HomeUiState(
-    val sites: List<SiteConfig> = emptyList(),
-    val currentSite: SiteConfig? = null,
-    val tabs: List<Category> = emptyList(),
-    val filters: Map<String, List<Filter>> = emptyMap(),
-    val selectedFilters: Map<String, String> = emptyMap(),
-    val filterPanelVisible: Boolean = false,
-    val selectedTabIndex: Int = 0,
     val loading: Boolean = false,
-    val videoPagingFlow: Flow<PagingData<VodInfo>> = emptyFlow(),
-    val errorMessage: String? = null
+    val errorMessage: String? = null,
+    val sourceName: String = "",
+    val popularVideos: List<VodInfo> = emptyList(),
+    val recentWatching: List<HomeMediaItem> = emptyList(),
+    val favorites: List<HomeMediaItem> = emptyList(),
+)
+
+data class HomeMediaItem(
+    val siteKey: String,
+    val videoId: String,
+    val title: String,
+    val cover: String,
+    val meta: String,
+)
+
+private data class HomeLibraryState(
+    val recentWatching: List<HomeMediaItem>,
+    val favorites: List<HomeMediaItem>,
 )

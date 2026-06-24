@@ -18,6 +18,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -29,6 +30,7 @@ import com.loong.longtv.data.room.entity.WatchHistoryEntity
 import com.loong.longtv.ui.theme.AppTextMuted
 import com.loong.longtv.ui.theme.AppTextPrimary
 import com.loong.longtv.ui.theme.AppTextSecondary
+import com.loong.longtv.ui.theme.AppThemeTokens
 import com.loong.longtv.ui.shared.widgets.AppButton
 import com.loong.longtv.ui.shared.widgets.AppHero
 import com.loong.longtv.ui.shared.widgets.AppPageHeader
@@ -100,7 +102,8 @@ internal fun HistoryCard(
                     contentDescription = item.title,
                     modifier = Modifier
                         .width(116.dp)
-                        .aspectRatio(2f / 3f),
+                        .aspectRatio(2f / 3f)
+                        .clip(AppThemeTokens.cardShape()),
                     contentScale = androidx.compose.ui.layout.ContentScale.Crop,
                     fallbackText = item.title.ifBlank { "历史记录" }
                 )
@@ -132,7 +135,9 @@ internal fun HistoryCard(
                 SmartAsyncImage(
                     model = item.cover,
                     contentDescription = item.title,
-                    modifier = Modifier.fillMaxWidth(),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(AppThemeTokens.cardShape()),
                     contentScale = androidx.compose.ui.layout.ContentScale.Crop,
                     fallbackText = item.title.ifBlank { "历史记录" }
                 )
@@ -165,7 +170,8 @@ internal fun HistoryCard(
                     contentDescription = item.title,
                     modifier = Modifier
                         .padding(4.dp)
-                        .width(160.dp),
+                        .width(160.dp)
+                        .clip(AppThemeTokens.cardShape()),
                     contentScale = androidx.compose.ui.layout.ContentScale.Crop,
                     fallbackText = item.title.ifBlank { "历史记录" }
                 )

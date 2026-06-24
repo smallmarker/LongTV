@@ -48,13 +48,12 @@ import com.loong.longtv.ui.shared.history.formatMs
 import com.loong.longtv.ui.shared.widgets.AppScreen
 import com.loong.longtv.ui.shared.widgets.SmartAsyncImage
 import com.loong.longtv.ui.theme.AppBackgroundElevated
-import com.loong.longtv.ui.theme.AppCardOverlay
 import com.loong.longtv.ui.theme.AppError
 import com.loong.longtv.ui.theme.AppSurface
-import com.loong.longtv.ui.theme.AppSurfaceVariant
 import com.loong.longtv.ui.theme.AppTextMuted
 import com.loong.longtv.ui.theme.AppTextPrimary
 import com.loong.longtv.ui.theme.AppTextSecondary
+import com.loong.longtv.ui.theme.AppThemeTokens
 import com.loong.longtv.ui.theme.BrandAccent
 import com.loong.longtv.ui.theme.BrandPrimary
 import java.text.SimpleDateFormat
@@ -161,7 +160,7 @@ private fun HistoryPhoneTopBar(
     ) {
         Row(
             modifier = Modifier
-                .clip(RoundedCornerShape(16.dp))
+                .clip(AppThemeTokens.buttonShape())
                 .clickable(onClick = onBack)
                 .padding(horizontal = 4.dp, vertical = 8.dp),
             verticalAlignment = Alignment.CenterVertically
@@ -202,12 +201,12 @@ private fun HistoryPhoneBatchBar(
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(22.dp))
-            .background(AppCardOverlay.copy(alpha = 0.96f))
+            .clip(AppThemeTokens.cardShape())
+            .background(Color.White.copy(alpha = 0.06f))
             .border(
                 width = 1.dp,
                 color = Color.White.copy(alpha = 0.08f),
-                shape = RoundedCornerShape(22.dp)
+                shape = AppThemeTokens.cardShape()
             )
             .padding(horizontal = 14.dp, vertical = 12.dp),
         horizontalArrangement = Arrangement.SpaceBetween,
@@ -267,7 +266,7 @@ private fun HistoryPhoneSection(
         }
 
         Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-            section.items.forEach { item ->
+            for (item in section.items) {
                 HistoryPhoneCard(
                     item = item,
                     selected = item.historyKey in selectedKeys,
@@ -293,19 +292,19 @@ private fun HistoryPhoneCard(
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(24.dp))
+            .clip(AppThemeTokens.cardShape())
             .background(
                 brush = Brush.verticalGradient(
                     colors = listOf(
-                        if (selected) BrandPrimary.copy(alpha = 0.22f) else AppSurfaceVariant.copy(alpha = 0.96f),
-                        if (selected) AppSurface.copy(alpha = 0.96f) else AppSurface.copy(alpha = 0.92f)
+                        if (selected) BrandPrimary.copy(alpha = 0.18f) else Color.White.copy(alpha = 0.07f),
+                        if (selected) AppSurface.copy(alpha = 0.88f) else Color.White.copy(alpha = 0.04f)
                     )
                 )
             )
             .border(
                 width = 1.dp,
                 color = if (selected) BrandPrimary.copy(alpha = 0.54f) else Color.White.copy(alpha = 0.07f),
-                shape = RoundedCornerShape(24.dp)
+                shape = AppThemeTokens.cardShape()
             )
             .clickable(onClick = if (editMode) onToggleSelected else onOpen)
             .padding(12.dp),
@@ -325,7 +324,7 @@ private fun HistoryPhoneCard(
             modifier = Modifier
                 .width(84.dp)
                 .aspectRatio(2f / 3f)
-                .clip(RoundedCornerShape(16.dp)),
+                .clip(AppThemeTokens.cardShape()),
             contentScale = androidx.compose.ui.layout.ContentScale.Crop,
             fallbackText = item.title.ifBlank { "历史记录" }
         )
@@ -361,7 +360,7 @@ private fun HistoryPhoneCard(
                 if (!editMode) {
                     Box(
                         modifier = Modifier
-                            .clip(RoundedCornerShape(999.dp))
+                            .clip(AppThemeTokens.buttonShape())
                             .background(BrandPrimary.copy(alpha = 0.18f))
                             .padding(horizontal = 10.dp, vertical = 6.dp)
                     ) {
@@ -460,8 +459,8 @@ private fun HistoryPhoneEmptyState() {
         Box(
             modifier = Modifier
                 .size(72.dp)
-                .clip(RoundedCornerShape(24.dp))
-                .background(AppCardOverlay)
+                .clip(AppThemeTokens.cardShape())
+                .background(Color.White.copy(alpha = 0.06f))
         )
         Text(
             text = "还没有观看历史",
@@ -487,8 +486,8 @@ private fun HistoryPhoneFooter(totalCount: Int) {
     Box(
         modifier = Modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(18.dp))
-            .background(AppCardOverlay.copy(alpha = 0.72f))
+            .clip(AppThemeTokens.cardShape())
+            .background(Color.White.copy(alpha = 0.05f))
             .padding(vertical = 14.dp),
         contentAlignment = Alignment.Center
     ) {
@@ -509,11 +508,11 @@ private fun HistoryTopActionChip(
 ) {
     Box(
         modifier = Modifier
-            .clip(RoundedCornerShape(999.dp))
+            .clip(AppThemeTokens.buttonShape())
             .background(
                 if (!enabled) AppSurface.copy(alpha = 0.45f)
                 else if (prominent) BrandPrimary.copy(alpha = 0.18f)
-                else AppCardOverlay
+                else Color.White.copy(alpha = 0.06f)
             )
             .clickable(enabled = enabled, onClick = onClick)
             .padding(horizontal = 12.dp, vertical = 8.dp),

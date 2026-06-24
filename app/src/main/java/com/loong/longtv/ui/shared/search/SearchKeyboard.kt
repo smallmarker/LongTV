@@ -60,7 +60,7 @@ fun SearchKeyboardAction(
     TvSurface(
         onClick = onClick,
         modifier = modifier,
-        shape = ClickableSurfaceDefaults.shape(RoundedCornerShape(12.dp)),
+        shape = ClickableSurfaceDefaults.shape(RoundedCornerShape(8.dp)),
     ) {
         Box(
             modifier = Modifier

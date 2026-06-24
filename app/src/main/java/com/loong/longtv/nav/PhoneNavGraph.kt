@@ -13,6 +13,7 @@ import com.loong.longtv.ui.phone.detail.VideoDetailPhoneScreen
 import com.loong.longtv.ui.phone.favorite.FavoritePhoneScreen
 import com.loong.longtv.ui.phone.history.HistoryPhoneScreen
 import com.loong.longtv.ui.phone.home.HomePhoneScreen
+import com.loong.longtv.ui.phone.popular.PopularPhoneScreen
 import com.loong.longtv.ui.phone.search.SearchPhoneScreen
 import com.loong.longtv.ui.phone.search.SearchResultPhoneScreen
 import com.loong.longtv.ui.phone.settings.SettingsPhoneScreen
@@ -24,6 +25,10 @@ fun PhoneNavGraph() {
     NavHost(navController = navController, startDestination = Screen.Home.route) {
         composable(Screen.Home.route) {
             HomePhoneScreen(navController = navController)
+        }
+
+        composable(Screen.Popular.route) {
+            PopularPhoneScreen(navController = navController)
         }
 
         composable(Screen.Search.route) {

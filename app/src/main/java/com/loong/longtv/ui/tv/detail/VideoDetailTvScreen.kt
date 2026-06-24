@@ -20,6 +20,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -98,7 +99,7 @@ internal fun VideoDetailTvContent(
     selectedSource: PlayLine?,
     playableMedia: PlayableMedia?,
     openingFullscreen: Boolean,
-    onOpenFullscreen: (PlayableMedia, String) -> Unit,
+    onOpenFullscreen: (PlayableMedia, String, Long) -> Unit,
     onProgressChanged: (Long, Long) -> Unit,
     onToggleFavorite: () -> Unit,
     onPlayCurrent: () -> Unit,
@@ -111,8 +112,28 @@ internal fun VideoDetailTvContent(
     val canOpenFullscreen = playableMedia != null &&
         !playableMedia.needsParse() &&
         playableMedia.url.isNotBlank()
+    var currentPositionMs by remember(playableMedia?.url, state.selectedEpisodeIndex) {
+        mutableLongStateOf(state.resumePositionMs)
+    }
+    var durationMs by remember(playableMedia?.url, state.selectedEpisodeIndex) {
+        mutableLongStateOf(0L)
+    }
     var previewFocused by remember(playableMedia?.url, state.selectedEpisodeIndex) { mutableStateOf(false) }
     val previewFocusRequester = remember(playableMedia?.url, state.selectedEpisodeIndex) { FocusRequester() }
+
+    fun saveLocalProgress(positionMs: Long, duration: Long) {
+        currentPositionMs = positionMs
+        durationMs = duration
+        onProgressChanged(positionMs, duration)
+    }
+
+    fun playNextEpisodeFromCurrent() {
+        val source = selectedSource ?: return
+        val targetIndex = state.selectedEpisodeIndex + 1
+        if (targetIndex !in source.episodes.indices) return
+        saveLocalProgress(0L, 0L)
+        onSelectEpisode(source, targetIndex)
+    }
 
     LaunchedEffect(canOpenFullscreen, playableMedia?.url, state.selectedEpisodeIndex) {
         if (canOpenFullscreen) {
@@ -179,7 +200,7 @@ internal fun VideoDetailTvContent(
                                     AndroidKeyEvent.KEYCODE_DPAD_CENTER,
                                     AndroidKeyEvent.KEYCODE_ENTER,
                                     AndroidKeyEvent.KEYCODE_NUMPAD_ENTER -> {
-                                        onOpenFullscreen(playableMedia!!, episodeName)
+                                        onOpenFullscreen(playableMedia!!, episodeName, currentPositionMs)
                                         true
                                     }
 
@@ -191,13 +212,15 @@ internal fun VideoDetailTvContent(
                             modifier = Modifier.fillMaxSize(),
                             detail = detail,
                             playableMedia = playableMedia,
-                            resumePositionMs = state.resumePositionMs,
+                            playerLoading = state.playerLoading,
+                            resumePositionMs = currentPositionMs,
                             selectedSource = selectedSource,
                             selectedEpisodeIndex = state.selectedEpisodeIndex,
                             sharedSessionReleaseDelayMs = if (openingFullscreen) 5_000L else 0L,
                             onBack = { navigator.popBackStack() },
                             onOpenFullscreen = onOpenFullscreen,
-                            onProgressChanged = onProgressChanged
+                            onProgressChanged = ::saveLocalProgress,
+                            onPlaybackEnded = ::playNextEpisodeFromCurrent
                         )
                     }
 
@@ -220,7 +243,7 @@ internal fun VideoDetailTvContent(
                             detail = detail,
                             selectedSource = selectedSource,
                             playableMedia = playableMedia,
-                            resumePositionMs = state.resumePositionMs,
+                            resumePositionMs = currentPositionMs,
                             phoneLayout = false,
                             onToggleFavorite = onToggleFavorite,
                             onPlayCurrent = onPlayCurrent,

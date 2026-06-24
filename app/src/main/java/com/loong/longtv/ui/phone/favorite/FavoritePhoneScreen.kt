@@ -20,7 +20,6 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.runtime.Composable
@@ -51,13 +50,12 @@ import com.loong.longtv.ui.shared.favorite.FavoriteViewModel
 import com.loong.longtv.ui.shared.widgets.AppScreen
 import com.loong.longtv.ui.shared.widgets.SmartAsyncImage
 import com.loong.longtv.ui.theme.AppBackgroundElevated
-import com.loong.longtv.ui.theme.AppCardOverlay
 import com.loong.longtv.ui.theme.AppError
 import com.loong.longtv.ui.theme.AppSurface
-import com.loong.longtv.ui.theme.AppSurfaceVariant
 import com.loong.longtv.ui.theme.AppTextMuted
 import com.loong.longtv.ui.theme.AppTextPrimary
 import com.loong.longtv.ui.theme.AppTextSecondary
+import com.loong.longtv.ui.theme.AppThemeTokens
 import com.loong.longtv.ui.theme.BrandAccent
 import com.loong.longtv.ui.theme.BrandPrimary
 import java.text.SimpleDateFormat
@@ -207,7 +205,7 @@ private fun FavoritePhoneTopBar(
     ) {
         Row(
             modifier = Modifier
-                .clip(RoundedCornerShape(16.dp))
+                .clip(AppThemeTokens.buttonShape())
                 .clickable(onClick = onBack)
                 .padding(horizontal = 4.dp, vertical = 8.dp),
             verticalAlignment = Alignment.CenterVertically
@@ -250,7 +248,7 @@ private fun FavoritePhoneCategoryTabs(
             .horizontalScroll(rememberScrollState()),
         horizontalArrangement = Arrangement.spacedBy(10.dp)
     ) {
-        FavoritePhoneCategory.entries.forEach { category ->
+        for (category in FavoritePhoneCategory.entries) {
             FavoriteTabChip(
                 category = category,
                 selected = selectedTab == category,
@@ -269,12 +267,12 @@ private fun FavoritePhoneStatsBar(
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(20.dp))
-            .background(AppCardOverlay.copy(alpha = 0.96f))
+            .clip(AppThemeTokens.cardShape())
+            .background(Color.White.copy(alpha = 0.06f))
             .border(
                 width = 1.dp,
                 color = Color.White.copy(alpha = 0.08f),
-                shape = RoundedCornerShape(20.dp)
+                shape = AppThemeTokens.cardShape()
             )
             .padding(horizontal = 14.dp, vertical = 12.dp),
         horizontalArrangement = Arrangement.SpaceBetween,
@@ -305,12 +303,12 @@ private fun FavoritePhoneBatchBar(
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(20.dp))
-            .background(AppCardOverlay.copy(alpha = 0.96f))
+            .clip(AppThemeTokens.cardShape())
+            .background(Color.White.copy(alpha = 0.06f))
             .border(
                 width = 1.dp,
                 color = Color.White.copy(alpha = 0.08f),
-                shape = RoundedCornerShape(20.dp)
+                shape = AppThemeTokens.cardShape()
             )
             .padding(horizontal = 14.dp, vertical = 12.dp),
         horizontalArrangement = Arrangement.SpaceBetween,
@@ -344,19 +342,19 @@ private fun FavoritePhoneCard(
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(18.dp))
+            .clip(AppThemeTokens.cardShape())
             .background(
                 brush = Brush.verticalGradient(
                     colors = listOf(
-                        if (selected) BrandPrimary.copy(alpha = 0.2f) else AppSurfaceVariant.copy(alpha = 0.96f),
-                        if (selected) AppSurface.copy(alpha = 0.98f) else AppSurface.copy(alpha = 0.92f)
+                        if (selected) BrandPrimary.copy(alpha = 0.18f) else Color.White.copy(alpha = 0.07f),
+                        if (selected) AppSurface.copy(alpha = 0.88f) else Color.White.copy(alpha = 0.04f)
                     )
                 )
             )
             .border(
                 width = 1.dp,
                 color = if (selected) BrandPrimary.copy(alpha = 0.52f) else Color.White.copy(alpha = 0.07f),
-                shape = RoundedCornerShape(18.dp)
+                shape = AppThemeTokens.cardShape()
             )
             .clickable(onClick = if (editMode) onToggleSelected else onOpen)
             .padding(horizontal = 12.dp, vertical = 12.dp),
@@ -376,7 +374,7 @@ private fun FavoritePhoneCard(
             modifier = Modifier
                 .width(104.dp)
                 .aspectRatio(16f / 9f)
-                .clip(RoundedCornerShape(14.dp)),
+                .clip(AppThemeTokens.cardShape()),
             contentScale = ContentScale.Crop,
             fallbackText = item.title.ifBlank { "收藏内容" }
         )
@@ -407,14 +405,6 @@ private fun FavoritePhoneCard(
                         overflow = TextOverflow.Ellipsis,
                         modifier = Modifier.padding(top = 4.dp)
                     )
-                    Text(
-                        text = favoriteTimeLine(item.createTime),
-                        color = AppTextMuted,
-                        fontSize = 12.sp,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                        modifier = Modifier.padding(top = 4.dp)
-                    )
                 }
 
                 if (!editMode) {
@@ -427,6 +417,13 @@ private fun FavoritePhoneCard(
                     }
                 }
             }
+            Text(
+                text = favoriteTimeLine(item.createTime),
+                color = AppTextMuted,
+                fontSize = 12.sp,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis
+            )
         }
     }
 }
@@ -442,8 +439,8 @@ private fun FavoritePhoneEmptyState() {
         Box(
             modifier = Modifier
                 .size(72.dp)
-                .clip(RoundedCornerShape(18.dp))
-                .background(AppCardOverlay)
+                .clip(AppThemeTokens.cardShape())
+                .background(Color.White.copy(alpha = 0.06f))
         )
         Text(
             text = "还没有收藏内容",
@@ -486,8 +483,8 @@ private fun FavoritePhoneFooter(
     Box(
         modifier = Modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(16.dp))
-            .background(AppCardOverlay.copy(alpha = 0.72f))
+            .clip(AppThemeTokens.cardShape())
+            .background(Color.White.copy(alpha = 0.05f))
             .clickable(enabled = hasMore, onClick = onLoadMore)
             .padding(vertical = 14.dp),
         contentAlignment = Alignment.Center
@@ -539,15 +536,15 @@ private fun FavoriteTabChip(
         modifier = Modifier
             .height(48.dp)
             .heightIn(min = 48.dp, max = 48.dp)
-            .clip(RoundedCornerShape(16.dp))
+            .clip(AppThemeTokens.buttonShape())
             .background(
                 if (selected) BrandPrimary.copy(alpha = 0.18f)
-                else AppCardOverlay.copy(alpha = 0.92f)
+                else Color.White.copy(alpha = 0.06f)
             )
             .border(
                 width = 1.dp,
                 color = if (selected) BrandPrimary.copy(alpha = 0.42f) else Color.White.copy(alpha = 0.06f),
-                shape = RoundedCornerShape(16.dp)
+                shape = AppThemeTokens.buttonShape()
             )
             .clickable(onClick = onClick)
             .padding(horizontal = 14.dp, vertical = 8.dp),
@@ -568,7 +565,7 @@ private fun FavoritePlayChip(onClick: () -> Unit) {
     Box(
         modifier = Modifier
             .width(64.dp)
-            .clip(RoundedCornerShape(14.dp))
+            .clip(AppThemeTokens.buttonShape())
             .background(
                 Brush.horizontalGradient(
                     colors = listOf(
@@ -580,7 +577,7 @@ private fun FavoritePlayChip(onClick: () -> Unit) {
             .border(
                 width = 1.dp,
                 color = BrandPrimary.copy(alpha = 0.32f),
-                shape = RoundedCornerShape(14.dp)
+                shape = AppThemeTokens.buttonShape()
             )
             .clickable(onClick = onClick)
             .padding(horizontal = 0.dp, vertical = 7.dp),
@@ -604,11 +601,11 @@ private fun FavoriteActionChip(
 ) {
     Box(
         modifier = Modifier
-            .clip(RoundedCornerShape(999.dp))
+            .clip(AppThemeTokens.buttonShape())
             .background(
                 if (!enabled) AppSurface.copy(alpha = 0.45f)
                 else if (prominent) BrandPrimary.copy(alpha = 0.18f)
-                else AppCardOverlay
+                else Color.White.copy(alpha = 0.06f)
             )
             .clickable(enabled = enabled, onClick = onClick)
             .padding(horizontal = 12.dp, vertical = 8.dp),

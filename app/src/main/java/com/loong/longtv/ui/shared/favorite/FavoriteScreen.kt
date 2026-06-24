@@ -3,8 +3,6 @@ package com.loong.longtv.ui.shared.favorite
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.ExperimentalLayoutApi
-import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.aspectRatio
@@ -15,10 +13,9 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -28,10 +25,8 @@ import com.loong.longtv.nav.Screen
 import com.loong.longtv.data.room.entity.FavoriteEntity
 import com.loong.longtv.ui.theme.AppTextMuted
 import com.loong.longtv.ui.theme.AppTextPrimary
+import com.loong.longtv.ui.theme.AppThemeTokens
 import com.loong.longtv.ui.shared.widgets.AppButton
-import com.loong.longtv.ui.shared.widgets.AppHero
-import com.loong.longtv.ui.shared.widgets.AppPageHeader
-import com.loong.longtv.ui.shared.widgets.AppScreen
 import com.loong.longtv.ui.shared.widgets.SectionHeader
 import com.loong.longtv.ui.shared.widgets.SmartAsyncImage
 import com.loong.longtv.ui.shared.widgets.TvSurface
@@ -97,7 +92,8 @@ internal fun FavoriteCard(
                         contentDescription = item.title,
                         modifier = Modifier
                             .width(116.dp)
-                            .aspectRatio(2f / 3f),
+                            .aspectRatio(2f / 3f)
+                            .clip(AppThemeTokens.cardShape()),
                         contentScale = androidx.compose.ui.layout.ContentScale.Crop,
                         fallbackText = item.title.ifBlank { "收藏内容" }
                     )
@@ -125,7 +121,9 @@ internal fun FavoriteCard(
                 SmartAsyncImage(
                     model = item.cover,
                     contentDescription = item.title,
-                    modifier = Modifier.fillMaxWidth(),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(AppThemeTokens.cardShape()),
                     contentScale = androidx.compose.ui.layout.ContentScale.Crop,
                     fallbackText = item.title.ifBlank { "收藏内容" }
                 )
@@ -146,7 +144,9 @@ internal fun FavoriteCard(
                 SmartAsyncImage(
                     model = item.cover,
                     contentDescription = item.title,
-                    modifier = Modifier.width(160.dp),
+                    modifier = Modifier
+                        .width(160.dp)
+                        .clip(AppThemeTokens.cardShape()),
                     contentScale = androidx.compose.ui.layout.ContentScale.Crop,
                     fallbackText = item.title.ifBlank { "收藏内容" }
                 )

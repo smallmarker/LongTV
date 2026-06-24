@@ -145,7 +145,8 @@ class AppRJ : Spider() {
                     "vod_id" to item.optString("vod_id"),
                     "vod_name" to item.optString("vod_name"),
                     "vod_pic" to (item.optString("vod_pic").ifEmpty { item.optString("vod_pic_thumb") }),
-                    "vod_remarks" to item.optString("vod_remarks")
+                    "vod_remarks" to item.optString("vod_remarks"),
+                    "vod_score" to item.optScore()
                 )
             }
             gson.toJson(mapOf<String, Any>("page" to (pg.toIntOrNull() ?: 1), "pagecount" to 99,
@@ -185,6 +186,7 @@ class AppRJ : Spider() {
                 "vod_remarks" to d.optString("vod_remarks"),
                 "vod_content" to d.optString("vod_content"),
                 "vod_year" to d.optString("vod_year"),
+                "vod_score" to d.optScore(),
                 "vod_actor" to d.optString("vod_actor"),
                 "vod_director" to d.optString("vod_director"),
                 "vod_play_from" to playFromParts.joinToString("\$\$\$"),
@@ -209,7 +211,8 @@ class AppRJ : Spider() {
                     "vod_id" to item.optString("vod_id"),
                     "vod_name" to item.optString("vod_name"),
                     "vod_pic" to (item.optString("vod_pic").ifEmpty { item.optString("vod_pic_thumb") }),
-                    "vod_remarks" to item.optString("vod_remarks")
+                    "vod_remarks" to item.optString("vod_remarks"),
+                    "vod_score" to item.optScore()
                 )
             }
             gson.toJson(mapOf("list" to items))
@@ -223,4 +226,11 @@ class AppRJ : Spider() {
     private fun emptyHomeContent() = gson.toJson(mapOf("class" to emptyList<Any>(), "filters" to emptyMap<String, Any>()))
     private fun emptyListResult() =
         gson.toJson(mapOf("page" to 1, "pagecount" to 0, "limit" to 20, "total" to 0, "list" to emptyList<Any>()))
+
+    private fun JSONObject.optScore(): String {
+        val keys = listOf("vod_score", "score", "rate", "douban_score", "vod_douban_score")
+        return keys.firstNotNullOfOrNull { key ->
+            optString(key).trim().takeIf { it.isNotBlank() && it != "0" && it != "0.0" }
+        }.orEmpty()
+    }
 }

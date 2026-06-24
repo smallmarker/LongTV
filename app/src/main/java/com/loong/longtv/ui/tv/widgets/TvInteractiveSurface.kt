@@ -5,7 +5,9 @@ import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
+import androidx.tv.material3.ClickableSurfaceBorder
 import androidx.tv.material3.ClickableSurfaceColors
+import androidx.tv.material3.ClickableSurfaceScale
 import androidx.tv.material3.ClickableSurfaceShape
 import androidx.tv.material3.Surface
 
@@ -17,6 +19,8 @@ fun TvInteractiveSurface(
     interactionSource: MutableInteractionSource? = null,
     shape: ClickableSurfaceShape,
     colors: ClickableSurfaceColors,
+    scale: ClickableSurfaceScale,
+    border: ClickableSurfaceBorder,
     content: @Composable (BoxScope.() -> Unit)
 ) {
     Surface(
@@ -26,6 +30,8 @@ fun TvInteractiveSurface(
         interactionSource = interactionSource,
         shape = shape,
         colors = colors,
+        scale = scale,
+        border = border,
         tonalElevation = 0.dp,
         content = content
     )

@@ -13,6 +13,7 @@ import com.loong.longtv.ui.tv.detail.VideoDetailTvScreen
 import com.loong.longtv.ui.tv.favorite.FavoriteTvScreen
 import com.loong.longtv.ui.tv.history.HistoryTvScreen
 import com.loong.longtv.ui.tv.home.HomeTvScreen
+import com.loong.longtv.ui.tv.popular.PopularTvScreen
 import com.loong.longtv.ui.tv.search.SearchResultTvScreen
 import com.loong.longtv.ui.tv.search.SearchTvScreen
 import com.loong.longtv.ui.tv.settings.SettingsTvScreen
@@ -24,6 +25,10 @@ fun TvNavGraph() {
     NavHost(navController = navController, startDestination = Screen.Home.route) {
         composable(Screen.Home.route) {
             HomeTvScreen(navController = navController)
+        }
+
+        composable(Screen.Popular.route) {
+            PopularTvScreen(navController = navController)
         }
 
         composable(Screen.Search.route) {

@@ -18,7 +18,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -28,6 +27,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.collectAsState
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
@@ -63,6 +63,7 @@ import com.loong.longtv.ui.theme.AppSurfaceVariant
 import com.loong.longtv.ui.theme.AppTextMuted
 import com.loong.longtv.ui.theme.AppTextPrimary
 import com.loong.longtv.ui.theme.AppTextSecondary
+import com.loong.longtv.ui.theme.AppThemeTokens
 import com.loong.longtv.ui.theme.BrandAccent
 import com.loong.longtv.ui.theme.BrandPrimary
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -227,7 +228,7 @@ private fun FavoriteTvTopBar(
                     .border(
                         width = 1.dp,
                         color = Color.White.copy(alpha = 0.08f),
-                        shape = RoundedCornerShape(16.dp)
+                        shape = AppThemeTokens.buttonShape()
                     )
                     .padding(horizontal = 18.dp, vertical = 14.dp),
                 contentAlignment = Alignment.CenterStart
@@ -274,17 +275,17 @@ private fun FavoriteTvCategoryBar(
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .background(AppCardOverlay.copy(alpha = 0.94f), RoundedCornerShape(24.dp))
+            .background(Color.White.copy(alpha = 0.06f), AppThemeTokens.cardShape())
             .border(
                 width = 1.dp,
                 color = Color.White.copy(alpha = 0.08f),
-                shape = RoundedCornerShape(24.dp)
+                shape = AppThemeTokens.cardShape()
             )
             .padding(horizontal = 18.dp, vertical = 12.dp),
         horizontalArrangement = Arrangement.spacedBy(14.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        TvFavoriteCategory.entries.forEach { category ->
+        for (category in TvFavoriteCategory.entries) {
             FavoriteTvTabChip(
                 category = category,
                 selected = selectedTab == category,
@@ -303,11 +304,11 @@ private fun FavoriteTvFilterBar(
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .background(AppCardOverlay.copy(alpha = 0.94f), RoundedCornerShape(22.dp))
+            .background(Color.White.copy(alpha = 0.06f), AppThemeTokens.cardShape())
             .border(
                 width = 1.dp,
                 color = Color.White.copy(alpha = 0.08f),
-                shape = RoundedCornerShape(22.dp)
+                shape = AppThemeTokens.cardShape()
             )
             .padding(horizontal = 22.dp, vertical = 14.dp),
         horizontalArrangement = Arrangement.SpaceBetween,
@@ -336,11 +337,11 @@ private fun FavoriteTvBatchBar(
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .background(AppCardOverlay.copy(alpha = 0.96f), RoundedCornerShape(22.dp))
+            .background(Color.White.copy(alpha = 0.06f), AppThemeTokens.cardShape())
             .border(
                 width = 1.dp,
                 color = Color.White.copy(alpha = 0.08f),
-                shape = RoundedCornerShape(22.dp)
+                shape = AppThemeTokens.cardShape()
             )
             .padding(horizontal = 22.dp, vertical = 16.dp),
         horizontalArrangement = Arrangement.SpaceBetween,
@@ -466,7 +467,7 @@ private fun FavoriteTvPosterCard(
                             }
                         )
                     ),
-                    shape = RoundedCornerShape(18.dp)
+                    shape = AppThemeTokens.cardShape()
                 )
                 .border(
                     width = 1.dp,
@@ -475,7 +476,7 @@ private fun FavoriteTvPosterCard(
                         focused -> BrandPrimary.copy(alpha = 0.38f)
                         else -> Color.White.copy(alpha = 0.07f)
                     },
-                    shape = RoundedCornerShape(18.dp)
+                    shape = AppThemeTokens.cardShape()
                 )
         ) {
             Box(
@@ -487,7 +488,8 @@ private fun FavoriteTvPosterCard(
                     contentDescription = item.title,
                     modifier = Modifier
                         .fillMaxWidth()
-                        .aspectRatio(16f / 9f),
+                        .aspectRatio(16f / 9f)
+                        .clip(AppThemeTokens.cardShape()),
                     contentScale = ContentScale.Crop,
                     fallbackText = item.title.ifBlank { "收藏内容" }
                 )
@@ -598,11 +600,11 @@ private fun FavoriteTvPagination(
     Column(
         modifier = Modifier
             .fillMaxWidth(0.7f)
-            .background(AppCardOverlay.copy(alpha = 0.86f), RoundedCornerShape(20.dp))
+            .background(Color.White.copy(alpha = 0.06f), AppThemeTokens.cardShape())
             .border(
                 width = 1.dp,
                 color = Color.White.copy(alpha = 0.08f),
-                shape = RoundedCornerShape(20.dp)
+                shape = AppThemeTokens.cardShape()
             )
             .padding(vertical = 16.dp),
         horizontalAlignment = Alignment.CenterHorizontally
@@ -638,11 +640,11 @@ private fun FavoriteTvEmptyState() {
         Column(
             modifier = Modifier
                 .width(520.dp)
-                .background(AppCardOverlay.copy(alpha = 0.86f), RoundedCornerShape(28.dp))
+                .background(Color.White.copy(alpha = 0.06f), AppThemeTokens.cardShape())
                 .border(
                     width = 1.dp,
                     color = Color.White.copy(alpha = 0.08f),
-                    shape = RoundedCornerShape(28.dp)
+                    shape = AppThemeTokens.cardShape()
                 )
                 .padding(horizontal = 28.dp, vertical = 30.dp),
             horizontalAlignment = Alignment.CenterHorizontally
@@ -700,7 +702,7 @@ private fun FavoriteTvTopActionChip(
                 .border(
                     width = 1.dp,
                     color = if (enabled) Color.White.copy(alpha = 0.08f) else Color.Transparent,
-                    shape = RoundedCornerShape(16.dp)
+                    shape = AppThemeTokens.buttonShape()
                 )
                 .padding(horizontal = 16.dp, vertical = 12.dp),
             contentAlignment = Alignment.Center
@@ -745,7 +747,7 @@ private fun FavoriteTvTabChip(
                 .border(
                     width = 1.dp,
                     color = if (selected) BrandPrimary.copy(alpha = 0.40f) else Color.White.copy(alpha = 0.07f),
-                    shape = RoundedCornerShape(18.dp)
+                    shape = AppThemeTokens.buttonShape()
                 )
                 .padding(horizontal = 18.dp),
             contentAlignment = Alignment.Center
@@ -778,7 +780,7 @@ private fun FavoriteTvSortChip(
                 .border(
                     width = 1.dp,
                     color = Color.White.copy(alpha = 0.08f),
-                    shape = RoundedCornerShape(16.dp)
+                    shape = AppThemeTokens.buttonShape()
                 )
                 .padding(horizontal = 16.dp, vertical = 10.dp),
             contentAlignment = Alignment.Center
@@ -818,7 +820,7 @@ private fun FavoriteTvMiniChip(
                 .border(
                     width = 1.dp,
                     color = if (warning && enabled) AppError.copy(alpha = 0.38f) else Color.White.copy(alpha = 0.08f),
-                    shape = RoundedCornerShape(16.dp)
+                    shape = AppThemeTokens.buttonShape()
                 )
                 .padding(horizontal = 18.dp, vertical = 10.dp),
             contentAlignment = Alignment.Center
@@ -888,8 +890,8 @@ class FavoriteTvDetailViewModel @Inject constructor(
     private val loadingKeys = mutableSetOf<String>()
 
     fun loadDetails(items: List<FavoriteEntity>) {
-        items.forEach { item ->
-            if (_detailMap.value.containsKey(item.favoriteKey) || !loadingKeys.add(item.favoriteKey)) return@forEach
+        for (item in items) {
+            if (_detailMap.value.containsKey(item.favoriteKey) || !loadingKeys.add(item.favoriteKey)) continue
             viewModelScope.launch {
                 val meta = loadDetailMeta(item)
                 _detailMap.update { current -> current + (item.favoriteKey to meta) }

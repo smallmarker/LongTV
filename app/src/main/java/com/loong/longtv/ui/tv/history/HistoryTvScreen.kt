@@ -29,6 +29,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.collectAsState
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Brush
@@ -59,6 +60,7 @@ import com.loong.longtv.ui.theme.AppSurfaceVariant
 import com.loong.longtv.ui.theme.AppTextMuted
 import com.loong.longtv.ui.theme.AppTextPrimary
 import com.loong.longtv.ui.theme.AppTextSecondary
+import com.loong.longtv.ui.theme.AppThemeTokens
 import com.loong.longtv.ui.theme.BrandAccent
 import com.loong.longtv.ui.theme.BrandPrimary
 import java.text.SimpleDateFormat
@@ -192,7 +194,7 @@ private fun TvHistoryTopBar(
                     .border(
                         width = 1.dp,
                         color = Color.White.copy(alpha = 0.08f),
-                        shape = RoundedCornerShape(16.dp)
+                        shape = AppThemeTokens.buttonShape()
                     )
                     .padding(horizontal = 16.dp, vertical = 12.dp),
                 contentAlignment = Alignment.CenterStart
@@ -238,11 +240,11 @@ private fun TvHistoryBatchBar(
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .background(AppCardOverlay.copy(alpha = 0.96f), RoundedCornerShape(22.dp))
+            .background(Color.White.copy(alpha = 0.06f), AppThemeTokens.cardShape())
             .border(
                 width = 1.dp,
                 color = Color.White.copy(alpha = 0.08f),
-                shape = RoundedCornerShape(22.dp)
+                shape = AppThemeTokens.cardShape()
             )
             .padding(horizontal = 20.dp, vertical = 16.dp),
         horizontalArrangement = Arrangement.SpaceBetween,
@@ -286,11 +288,11 @@ private fun TvHistorySection(
         ) {
             Box(
                 modifier = Modifier
-                    .background(AppCardOverlay.copy(alpha = 0.78f), RoundedCornerShape(18.dp))
+                    .background(Color.White.copy(alpha = 0.05f), AppThemeTokens.cardShape())
                     .border(
                         width = 1.dp,
                         color = Color.White.copy(alpha = 0.08f),
-                        shape = RoundedCornerShape(18.dp)
+                        shape = AppThemeTokens.cardShape()
                     )
                     .padding(horizontal = 18.dp, vertical = 12.dp)
             ) {
@@ -385,7 +387,7 @@ private fun TvHistoryPosterCard(
                             }
                         )
                     ),
-                    shape = RoundedCornerShape(20.dp)
+                    shape = AppThemeTokens.cardShape()
                 )
                 .border(
                     width = 1.dp,
@@ -395,7 +397,7 @@ private fun TvHistoryPosterCard(
                         editMode -> Color.White.copy(alpha = 0.04f)
                         else -> Color.White.copy(alpha = 0.07f)
                     },
-                    shape = RoundedCornerShape(20.dp)
+                    shape = AppThemeTokens.cardShape()
                 )
                 .padding(horizontal = 0.dp, vertical = 0.dp)
         ) {
@@ -405,7 +407,8 @@ private fun TvHistoryPosterCard(
                     contentDescription = item.title,
                     modifier = Modifier
                         .fillMaxWidth()
-                        .aspectRatio(0.84f),
+                        .aspectRatio(0.84f)
+                        .clip(AppThemeTokens.cardShape()),
                     contentScale = androidx.compose.ui.layout.ContentScale.Crop,
                     fallbackText = item.title.ifBlank { "历史记录" }
                 )
@@ -537,11 +540,11 @@ private fun TvHistoryPagination(
     Column(
         modifier = Modifier
             .fillMaxWidth(0.7f)
-            .background(AppCardOverlay.copy(alpha = 0.86f), RoundedCornerShape(20.dp))
+            .background(Color.White.copy(alpha = 0.06f), AppThemeTokens.cardShape())
             .border(
                 width = 1.dp,
                 color = Color.White.copy(alpha = 0.08f),
-                shape = RoundedCornerShape(20.dp)
+                shape = AppThemeTokens.cardShape()
             )
             .padding(vertical = 16.dp),
         horizontalAlignment = Alignment.CenterHorizontally
@@ -577,11 +580,11 @@ private fun TvHistoryEmptyState() {
         Column(
             modifier = Modifier
                 .width(520.dp)
-                .background(AppCardOverlay.copy(alpha = 0.86f), RoundedCornerShape(28.dp))
+                .background(Color.White.copy(alpha = 0.06f), AppThemeTokens.cardShape())
                 .border(
                     width = 1.dp,
                     color = Color.White.copy(alpha = 0.08f),
-                    shape = RoundedCornerShape(28.dp)
+                    shape = AppThemeTokens.cardShape()
                 )
                 .padding(horizontal = 28.dp, vertical = 30.dp),
             horizontalAlignment = Alignment.CenterHorizontally
@@ -626,7 +629,7 @@ private fun TvTopActionChip(
                 .border(
                     width = 1.dp,
                     color = if (prominent) BrandPrimary.copy(alpha = 0.34f) else Color.White.copy(alpha = 0.08f),
-                    shape = RoundedCornerShape(999.dp)
+                    shape = AppThemeTokens.buttonShape()
                 )
                 .padding(horizontal = 18.dp, vertical = 10.dp),
             contentAlignment = Alignment.Center
@@ -670,7 +673,7 @@ private fun TvMiniActionChip(
                         warning -> AppError.copy(alpha = 0.28f)
                         else -> Color.White.copy(alpha = 0.08f)
                     },
-                    shape = RoundedCornerShape(999.dp)
+                    shape = AppThemeTokens.buttonShape()
                 )
                 .padding(horizontal = 18.dp, vertical = 10.dp),
             contentAlignment = Alignment.Center

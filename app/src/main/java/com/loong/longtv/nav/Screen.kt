@@ -5,6 +5,7 @@ import com.google.gson.Gson
 
 sealed class Screen(val route: String) {
     object Home : Screen("home")
+    object Popular : Screen("popular")
     object Search : Screen("search")
     object History : Screen("history")
     object Favorite : Screen("favorite")

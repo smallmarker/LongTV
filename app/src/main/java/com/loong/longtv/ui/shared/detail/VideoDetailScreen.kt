@@ -4,6 +4,8 @@ import android.content.Context
 import android.content.Context.AUDIO_SERVICE
 import android.content.ContextWrapper
 import android.media.AudioManager
+import android.os.Build
+import android.text.Html
 import androidx.compose.foundation.background
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Canvas
@@ -50,6 +52,7 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.platform.LocalContext
@@ -81,6 +84,7 @@ import com.loong.longtv.ui.theme.AppSurfaceVariant
 import com.loong.longtv.ui.theme.AppTextMuted
 import com.loong.longtv.ui.theme.AppTextPrimary
 import com.loong.longtv.ui.theme.AppTextSecondary
+import com.loong.longtv.ui.theme.AppThemeTokens
 import com.loong.longtv.ui.theme.BrandPrimary
 import com.loong.longtv.ui.theme.BrandSecondary
 import com.loong.longtv.ui.theme.BrandAccent
@@ -88,6 +92,7 @@ import com.loong.longtv.ui.shared.widgets.AppButton
 import com.loong.longtv.ui.shared.widgets.SectionHeader
 import com.loong.longtv.ui.shared.widgets.SmartAsyncImage
 import com.loong.longtv.ui.shared.widgets.TvSurface
+import com.loong.player.PlayerInteractionDefaults
 import kotlinx.coroutines.launch
 import kotlin.math.abs
 import kotlin.math.roundToInt
@@ -108,7 +113,7 @@ internal fun VideoDetailRouteContent(
         selectedSource: PlayLine?,
         playableMedia: PlayableMedia?,
         openingFullscreen: Boolean,
-        onOpenFullscreen: (PlayableMedia, String) -> Unit,
+        onOpenFullscreen: (PlayableMedia, String, Long) -> Unit,
         onProgressChanged: (Long, Long) -> Unit,
         onToggleFavorite: () -> Unit,
         onPlayCurrent: () -> Unit,
@@ -124,7 +129,7 @@ internal fun VideoDetailRouteContent(
     var reopenFullscreenAfterSwitch by remember(key, id) { mutableStateOf(false) }
     var openingFullscreen by remember(key, id) { mutableStateOf(false) }
 
-    fun openFullscreen(playableMedia: PlayableMedia, episodeName: String) {
+    fun openFullscreen(playableMedia: PlayableMedia, episodeName: String, positionMs: Long) {
         openingFullscreen = true
         navigator.navigate(
             Screen.FullscreenPlayer.createRoute(
@@ -134,7 +139,7 @@ internal fun VideoDetailRouteContent(
                 },
                 url = playableMedia.url,
                 headers = playableMedia.headers,
-                position = state.resumePositionMs,
+                position = positionMs,
                 episodeIndex = state.selectedEpisodeIndex,
                 episodeCount = state.detail?.getPlayLines()?.getOrNull(state.selectedSourceIndex)?.episodes?.size ?: 0
             )
@@ -171,7 +176,7 @@ internal fun VideoDetailRouteContent(
             ?.name
             .orEmpty()
         reopenFullscreenAfterSwitch = false
-        openFullscreen(playableMedia, episodeName)
+        openFullscreen(playableMedia, episodeName, state.resumePositionMs)
     }
 
     when {
@@ -219,13 +224,15 @@ internal fun DetailPreviewBlock(
     modifier: Modifier = Modifier,
     detail: com.loong.longtv.engine.source.model.VodInfo,
     playableMedia: PlayableMedia?,
+    playerLoading: Boolean,
     resumePositionMs: Long,
     selectedSource: PlayLine?,
     selectedEpisodeIndex: Int,
     sharedSessionReleaseDelayMs: Long,
     onBack: () -> Unit,
-    onOpenFullscreen: (PlayableMedia, String) -> Unit,
-    onProgressChanged: (Long, Long) -> Unit
+    onOpenFullscreen: (PlayableMedia, String, Long) -> Unit,
+    onProgressChanged: (Long, Long) -> Unit,
+    onPlaybackEnded: () -> Unit = {}
 ) {
     val context = LocalContext.current
     val audioManager = remember(context) { context.getSystemService(AUDIO_SERVICE) as AudioManager }
@@ -242,9 +249,11 @@ internal fun DetailPreviewBlock(
     var durationMs by remember(playableMedia?.url) { mutableLongStateOf(0L) }
     var isPlaying by remember(playableMedia?.url) { mutableStateOf(false) }
     var isBuffering by remember(playableMedia?.url) { mutableStateOf(false) }
+    var playerReady by remember(playableMedia?.url) { mutableStateOf(false) }
     var chromeVisible by remember(playableMedia?.url) { mutableStateOf(false) }
     var chromeInteractionVersion by remember(playableMedia?.url) { mutableLongStateOf(0L) }
     var gestureInProgress by remember(playableMedia?.url) { mutableStateOf(false) }
+    var progressBarWidthPx by remember(playableMedia?.url) { mutableStateOf(1f) }
     var isScrubbing by remember(playableMedia?.url) { mutableStateOf(false) }
     var scrubPositionMs by remember(playableMedia?.url, resumePositionMs) { mutableLongStateOf(resumePositionMs) }
     var phoneFeedbackOverlay by remember(playableMedia?.url) { mutableStateOf<PhoneFeedbackOverlay?>(null) }
@@ -259,7 +268,7 @@ internal fun DetailPreviewBlock(
 
     LaunchedEffect(chromeVisible, chromeInteractionVersion, playableMedia?.url, gestureInProgress) {
         if (chromeVisible && !gestureInProgress) {
-            kotlinx.coroutines.delay(3_000)
+            kotlinx.coroutines.delay(PlayerInteractionDefaults.ControlsAutoHideMs)
             chromeVisible = false
         }
     }
@@ -267,21 +276,43 @@ internal fun DetailPreviewBlock(
     LaunchedEffect(phoneFeedbackOverlay, phoneFeedbackVersion, gestureInProgress) {
         val current = phoneFeedbackOverlay ?: return@LaunchedEffect
         val timeout = when (current) {
-            is PhoneFeedbackOverlay.Adjustment -> 1_000L
-            is PhoneFeedbackOverlay.Seek -> if (gestureInProgress) Long.MAX_VALUE else 500L
-            is PhoneFeedbackOverlay.PlayPause -> 500L
+            is PhoneFeedbackOverlay.Adjustment -> PlayerInteractionDefaults.FeedbackAutoHideMs
+            is PhoneFeedbackOverlay.Seek -> if (gestureInProgress) null else PlayerInteractionDefaults.SeekFeedbackAutoHideMs
+            is PhoneFeedbackOverlay.PlayPause -> PlayerInteractionDefaults.PlayPauseFeedbackAutoHideMs
         }
-        if (timeout != Long.MAX_VALUE) {
-            kotlinx.coroutines.delay(timeout)
-            if (phoneFeedbackOverlay == current) {
-                phoneFeedbackOverlay = null
-            }
+        if (timeout == null) return@LaunchedEffect
+        kotlinx.coroutines.delay(timeout)
+        if (phoneFeedbackOverlay == current) {
+            phoneFeedbackOverlay = null
+        }
+    }
+
+    LaunchedEffect(gestureInProgress, phoneFeedbackVersion) {
+        if (gestureInProgress || phoneFeedbackOverlay !is PhoneFeedbackOverlay.Seek) {
+            return@LaunchedEffect
+        }
+        kotlinx.coroutines.delay(PlayerInteractionDefaults.SeekFeedbackAutoHideMs)
+        if (phoneFeedbackOverlay is PhoneFeedbackOverlay.Seek) {
+            phoneFeedbackOverlay = null
         }
     }
 
     fun registerChromeInteraction() {
         chromeVisible = true
         chromeInteractionVersion += 1
+    }
+
+    fun showChrome() {
+        chromeVisible = true
+        chromeInteractionVersion += 1
+    }
+
+    fun toggleChrome() {
+        if (chromeVisible) {
+            chromeVisible = false
+        } else {
+            showChrome()
+        }
     }
 
     fun showPhoneFeedback(
@@ -346,9 +377,26 @@ internal fun DetailPreviewBlock(
 
     fun commitPreviewSeek() {
         if (!isScrubbing) return
+        currentPositionMs = scrubPositionMs
         controlState.seekTo(scrubPositionMs)
+        onProgressChanged(scrubPositionMs, durationMs)
         isScrubbing = false
         phoneFeedbackVersion += 1
+        registerChromeInteraction()
+    }
+
+    fun positionFromBarOffset(offsetX: Float): Long {
+        if (durationMs <= 0 || progressBarWidthPx <= 0f) return currentPositionMs
+        val percent = (offsetX / progressBarWidthPx).coerceIn(0f, 1f)
+        return (durationMs * percent).roundToLong()
+    }
+
+    fun seekToPosition(positionMs: Long) {
+        val duration = durationMs.takeIf { it > 0 } ?: Long.MAX_VALUE
+        currentPositionMs = positionMs.coerceIn(0L, duration)
+        scrubPositionMs = currentPositionMs
+        controlState.seekTo(currentPositionMs)
+        onProgressChanged(currentPositionMs, durationMs)
         registerChromeInteraction()
     }
 
@@ -376,6 +424,7 @@ internal fun DetailPreviewBlock(
                 videoUrl = playableMedia.url,
                 requestHeaders = playableMedia.headers,
                 initialPositionMs = resumePositionMs,
+                repeat = false,
                 enableNativeController = false,
                 sharedSessionEnabled = true,
                 sharedSessionReleaseDelayMs = sharedSessionReleaseDelayMs,
@@ -390,16 +439,15 @@ internal fun DetailPreviewBlock(
                 },
                 onPlaybackStateChanged = { state ->
                     isBuffering = state == Player.STATE_BUFFERING
+                    if (state == Player.STATE_READY) {
+                        playerReady = true
+                    }
                 },
                 onPlayingChanged = { playing ->
                     isPlaying = playing
                 },
-                onSurfaceTap = {
-                    chromeVisible = !chromeVisible
-                    if (chromeVisible) {
-                        chromeInteractionVersion += 1
-                    }
-                }
+                onPlaybackEnded = onPlaybackEnded,
+                onSurfaceTap = null
             )
         } else {
             SmartAsyncImage(
@@ -413,6 +461,20 @@ internal fun DetailPreviewBlock(
             )
         }
 
+        val playableReady = playableMedia?.url?.isNotBlank() == true && !playableMedia.needsParse()
+        val seekFeedbackVisible = gestureInProgress ||
+            isScrubbing ||
+            phoneFeedbackOverlay is PhoneFeedbackOverlay.Seek
+        val showPlayerLoading = playableReady &&
+            !isPlaying &&
+            !seekFeedbackVisible &&
+            ((playerLoading && !playerReady) || !playerReady || isBuffering)
+        if (showPlayerLoading) {
+            PlayerLoadingOverlay(
+                modifier = Modifier.matchParentSize()
+            )
+        }
+
         if (playableMedia?.url?.isNotBlank() == true && !playableMedia.needsParse()) {
             PhoneFullscreenGestureLayer(
                 modifier = Modifier.matchParentSize(),
@@ -420,12 +482,8 @@ internal fun DetailPreviewBlock(
                 currentPositionMs = currentPositionMs,
                 brightnessPercent = (brightnessLevel * 100f).roundToInt().coerceIn(0, 100),
                 volumePercent = volumePercent,
-                onSingleTap = {
-                    chromeVisible = !chromeVisible
-                    if (chromeVisible) {
-                        chromeInteractionVersion += 1
-                    }
-                },
+                reservedBottom = 0.dp,
+                onSingleTap = ::toggleChrome,
                 onDoubleTap = ::togglePlayPauseFromGesture,
                 onGestureStart = {
                     gestureInProgress = true
@@ -436,7 +494,10 @@ internal fun DetailPreviewBlock(
                     when (type) {
                         PhoneGestureType.BRIGHTNESS,
                         PhoneGestureType.VOLUME -> phoneFeedbackVersion += 1
-                        PhoneGestureType.SEEK -> commitPreviewSeek()
+                        PhoneGestureType.SEEK -> {
+                            commitPreviewSeek()
+                            phoneFeedbackVersion += 1
+                        }
                     }
                 },
                 onBrightnessChange = ::updateBrightnessPercent,
@@ -504,9 +565,9 @@ internal fun DetailPreviewBlock(
                 MiniPlayPauseIcon(
                     isPlaying = isPlaying,
                     modifier = Modifier
-                        .padding(end = 8.dp)
+                        .padding(end = 10.dp)
                         .clickable(onClick = ::togglePlayPauseFromControl)
-                        .padding(2.dp)
+                        .padding(4.dp)
                 )
                 Text(
                     text = when {
@@ -521,20 +582,69 @@ internal fun DetailPreviewBlock(
                 Box(
                     modifier = Modifier
                         .weight(1f)
-                        .height(5.dp)
-                        .clip(RoundedCornerShape(999.dp))
-                        .background(Color.White.copy(alpha = 0.15f))
+                        .height(24.dp)
+                        .pointerInput(durationMs, progressBarWidthPx) {
+                            detectTapGestures { offset ->
+                                if (durationMs <= 0) return@detectTapGestures
+                                seekToPosition(positionFromBarOffset(offset.x))
+                            }
+                        }
+                        .pointerInput(durationMs, progressBarWidthPx) {
+                            detectDragGestures(
+                                onDragStart = { offset ->
+                                    if (durationMs <= 0) return@detectDragGestures
+                                    isScrubbing = true
+                                    scrubPositionMs = positionFromBarOffset(offset.x)
+                                    registerChromeInteraction()
+                                },
+                                onDragCancel = {
+                                    isScrubbing = false
+                                    registerChromeInteraction()
+                                },
+                                onDragEnd = {
+                                    if (isScrubbing) {
+                                        seekToPosition(scrubPositionMs)
+                                    }
+                                    isScrubbing = false
+                                }
+                            ) { change, _ ->
+                                if (durationMs <= 0) return@detectDragGestures
+                                scrubPositionMs = positionFromBarOffset(change.position.x)
+                                registerChromeInteraction()
+                            }
+                        }
+                        .onSizeChanged { progressBarWidthPx = it.width.toFloat().coerceAtLeast(1f) },
+                    contentAlignment = Alignment.CenterStart
                 ) {
                     Box(
                         modifier = Modifier
-                            .fillMaxWidth(playbackProgress(currentPositionMs, durationMs))
                             .height(5.dp)
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(999.dp))
+                            .background(Color.White.copy(alpha = 0.18f))
+                    )
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth(playbackProgress(if (isScrubbing) scrubPositionMs else currentPositionMs, durationMs))
+                            .height(5.dp)
+                            .clip(RoundedCornerShape(999.dp))
                             .background(
                                 Brush.horizontalGradient(
                                     listOf(BrandPrimary, Color(0xFFFF7F58))
                                 )
                             )
                     )
+                    Box(
+                        modifier = Modifier.fillMaxWidth(playbackProgress(if (isScrubbing) scrubPositionMs else currentPositionMs, durationMs)),
+                        contentAlignment = Alignment.CenterEnd
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .size(9.dp)
+                                .clip(RoundedCornerShape(999.dp))
+                                .background(Color(0xFFE7ECF3))
+                        )
+                    }
                 }
                 Text(
                     text = when {
@@ -550,7 +660,13 @@ internal fun DetailPreviewBlock(
                 if (readyPlayableMedia != null) {
                     FullscreenIconButton(
                         modifier = Modifier.padding(start = 10.dp),
-                        onClick = { onOpenFullscreen(readyPlayableMedia, episodeName) }
+                        onClick = {
+                            onOpenFullscreen(
+                                readyPlayableMedia,
+                                episodeName,
+                                if (isScrubbing) scrubPositionMs else currentPositionMs
+                            )
+                        }
                     )
                 }
             }
@@ -564,7 +680,7 @@ private fun MiniPlayPauseIcon(
     isPlaying: Boolean,
     modifier: Modifier = Modifier
 ) {
-    Canvas(modifier = modifier.size(12.dp)) {
+    Canvas(modifier = modifier.size(16.dp)) {
         if (isPlaying) {
             val barWidth = size.width * 0.22f
             val gap = size.width * 0.16f
@@ -613,8 +729,9 @@ internal fun DetailInfoBlock(
     val year = detail.year.safeText()
     val area = detail.area.safeText()
     val remarks = detail.remarks.safeText()
-    val content = detail.content.safeText("暂无简介\nID: ${detail.id.safeText()}")
+    val content = detail.content.safeDescriptionText("暂无简介\nID: ${detail.id.safeText()}")
     var showFullDescription by remember(title, content) { mutableStateOf(false) }
+    var phoneDescriptionExpanded by remember(title, content) { mutableStateOf(false) }
 
     if (phoneLayout) {
         Column(modifier = modifier) {
@@ -641,18 +758,10 @@ internal fun DetailInfoBlock(
                 fontSize = 13.sp
             )
             Spacer(modifier = Modifier.height(12.dp))
-            Text(
-                text = content,
-                color = AppTextMuted,
-                fontSize = 13.sp,
-                lineHeight = 19.sp
-            )
-            Spacer(modifier = Modifier.height(16.dp))
-            PhonePlaybackSummaryCard(
-                selectedSource = selectedSource,
-                selectedEpisodeIndex = state.selectedEpisodeIndex,
-                playableMedia = playableMedia,
-                resumePositionMs = resumePositionMs
+            PhoneDescriptionSection(
+                content = content,
+                expanded = phoneDescriptionExpanded,
+                onToggle = { phoneDescriptionExpanded = !phoneDescriptionExpanded }
             )
             Spacer(modifier = Modifier.height(16.dp))
             PhoneDetailActionGroup(
@@ -707,13 +816,6 @@ internal fun DetailInfoBlock(
                 )
             }
 
-            CurrentPlaybackInfo(
-                selectedSource = selectedSource,
-                playableMedia = playableMedia,
-                siteLabel = state.siteName.ifBlank { state.siteKey },
-                phoneLayout = false
-            )
-            Spacer(modifier = Modifier.height(16.dp))
             FlowRow(
                 horizontalArrangement = Arrangement.spacedBy(12.dp),
                 verticalArrangement = Arrangement.spacedBy(12.dp)
@@ -759,7 +861,7 @@ internal fun DetailInfoBlock(
         }
     }
 
-    if (!phoneLayout && showFullDescription) {
+    if (showFullDescription) {
         TvFullDescriptionDialog(
             title = title,
             content = content,
@@ -776,7 +878,7 @@ private fun TvDetailActionButton(
     prominent: Boolean = false,
     enabled: Boolean = true
 ) {
-    val shape = RoundedCornerShape(16.dp)
+    val shape = AppThemeTokens.buttonShape()
     TvSurface(
         onClick = onClick,
         modifier = modifier
@@ -1032,6 +1134,53 @@ private fun String?.safeText(fallback: String = ""): String {
     return this.orEmpty().takeIf { it.isNotBlank() } ?: fallback
 }
 
+private fun String?.safeDescriptionText(fallback: String = ""): String {
+    val raw = this.orEmpty().trim()
+    if (raw.isBlank()) return fallback
+    val decoded = if (raw.contains('<') || raw.contains('&')) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
+            Html.fromHtml(raw, Html.FROM_HTML_MODE_LEGACY).toString()
+        } else {
+            @Suppress("DEPRECATION")
+            Html.fromHtml(raw).toString()
+        }
+    } else {
+        raw
+    }
+    return decoded
+        .replace('\u00A0', ' ')
+        .lineSequence()
+        .map { it.trim() }
+        .filter { it.isNotBlank() }
+        .joinToString("\n")
+        .ifBlank { fallback }
+}
+
+@Composable
+private fun PhoneDescriptionSection(
+    content: String,
+    expanded: Boolean,
+    onToggle: () -> Unit
+) {
+    Text(
+        text = content,
+        color = AppTextMuted,
+        fontSize = 13.sp,
+        lineHeight = 19.sp,
+        maxLines = if (expanded) Int.MAX_VALUE else 3,
+        overflow = if (expanded) TextOverflow.Clip else TextOverflow.Ellipsis
+    )
+    Text(
+        text = if (expanded) "收起" else "展开",
+        color = BrandPrimary,
+        fontSize = 13.sp,
+        fontWeight = FontWeight.SemiBold,
+        modifier = Modifier
+            .padding(top = 8.dp)
+            .clickable(onClick = onToggle)
+    )
+}
+
 @Composable
 private fun DetailChip(text: String) {
     Box(
@@ -1210,13 +1359,13 @@ private fun PhoneDetailActionButton(
 
     Box(
         modifier = modifier
-            .clip(RoundedCornerShape(if (primary) 18.dp else 16.dp))
+            .clip(RoundedCornerShape(8.dp))
             .background(background)
             .then(
                 if (!primary) {
                     Modifier.border(
                         border = BorderStroke(1.dp, Color.White.copy(alpha = 0.08f)),
-                        shape = RoundedCornerShape(16.dp)
+                        shape = RoundedCornerShape(8.dp)
                     )
                 } else {
                     Modifier
@@ -1283,11 +1432,12 @@ private fun FullscreenIconButton(
 ) {
     Box(
         modifier = modifier
+            .size(44.dp)
             .clickable(onClick = onClick)
-            .padding(2.dp),
+            .padding(14.dp),
         contentAlignment = Alignment.Center
     ) {
-        ExpandCornersIcon(size = 16.dp, color = AppTextPrimary)
+        ExpandCornersIcon(size = 16.dp, color = Color(0xFFE7ECF3).copy(alpha = 0.82f))
     }
 }
 
@@ -1486,7 +1636,7 @@ private fun PhoneSelectorChip(
 ) {
     Box(
         modifier = Modifier
-            .clip(RoundedCornerShape(14.dp))
+            .clip(RoundedCornerShape(8.dp))
             .background(
                 if (selected) BrandSecondary.copy(alpha = 0.12f)
                 else Color.White.copy(alpha = 0.04f)
@@ -1497,7 +1647,7 @@ private fun PhoneSelectorChip(
                     if (selected) BrandSecondary.copy(alpha = 0.34f)
                     else Color.White.copy(alpha = 0.08f)
                 ),
-                shape = RoundedCornerShape(14.dp)
+                shape = RoundedCornerShape(8.dp)
             )
             .clickable(onClick = onClick)
             .padding(horizontal = 14.dp, vertical = 10.dp),
@@ -1518,7 +1668,7 @@ private fun TvDetailChoiceChip(
     selected: Boolean,
     onClick: () -> Unit
 ) {
-    val shape = RoundedCornerShape(16.dp)
+    val shape = RoundedCornerShape(8.dp)
     TvSurface(
         onClick = onClick,
         modifier = Modifier
@@ -1554,12 +1704,12 @@ private fun TvEpisodeTile(
     selected: Boolean,
     onClick: () -> Unit
 ) {
-    val shape = RoundedCornerShape(18.dp)
+    val shape = RoundedCornerShape(8.dp)
     TvSurface(
         onClick = onClick,
         modifier = Modifier
             .width(148.dp)
-            .height(58.dp)
+            .height(46.dp)
             .clip(shape)
             .border(
                 BorderStroke(
@@ -1586,7 +1736,7 @@ private fun TvEpisodeTile(
             Box(
                 modifier = Modifier
                     .width(3.dp)
-                    .height(22.dp)
+                    .height(18.dp)
                     .clip(RoundedCornerShape(999.dp))
                     .background(
                         if (selected) BrandPrimary
@@ -1615,8 +1765,8 @@ private fun PhoneEpisodeCard(
 ) {
     Box(
         modifier = modifier
-            .height(52.dp)
-            .clip(RoundedCornerShape(18.dp))
+            .height(44.dp)
+            .clip(AppThemeTokens.buttonShape())
             .background(
                 if (selected) Color.White.copy(alpha = 0.10f)
                 else Color.White.copy(alpha = 0.035f)
@@ -1627,7 +1777,7 @@ private fun PhoneEpisodeCard(
                     if (selected) Color.White.copy(alpha = 0.22f)
                     else Color.White.copy(alpha = 0.07f)
                 ),
-                shape = RoundedCornerShape(18.dp)
+                shape = AppThemeTokens.buttonShape()
             )
             .clickable(onClick = onClick)
             .padding(horizontal = 12.dp),

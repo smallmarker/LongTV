@@ -1,6 +1,7 @@
 package com.loong.longtv.ui.shared.search
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -10,6 +11,7 @@ import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -44,6 +46,8 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Search
+import androidx.tv.material3.Border
+import androidx.tv.material3.ClickableSurfaceDefaults
 import androidx.tv.material3.ExperimentalTvMaterial3Api
 import androidx.tv.material3.Icon
 import androidx.tv.material3.Text
@@ -55,7 +59,9 @@ import com.loong.longtv.ui.theme.AppSurfaceVariant
 import com.loong.longtv.ui.theme.AppTextMuted
 import com.loong.longtv.ui.theme.AppTextPrimary
 import com.loong.longtv.ui.theme.AppTextSecondary
+import com.loong.longtv.ui.theme.AppThemeTokens
 import com.loong.longtv.ui.theme.BrandAccent
+import com.loong.longtv.ui.theme.BrandPrimary
 import com.loong.longtv.ui.shared.widgets.AppHero
 import com.loong.longtv.ui.shared.widgets.AppPageHeader
 import com.loong.longtv.ui.shared.widgets.AppScreen
@@ -134,19 +140,11 @@ private fun TvSearchInputPanel(
             modifier = Modifier
                 .fillMaxWidth()
                 .height(42.dp)
-                .background(
-                    Brush.horizontalGradient(
-                        colors = listOf(
-                            AppSurfaceVariant.copy(alpha = 0.98f),
-                            AppSurface.copy(alpha = 0.96f)
-                        )
-                    ),
-                    RoundedCornerShape(18.dp)
-                )
+                .background(AppThemeTokens.fieldBackground(), AppThemeTokens.fieldShape())
                 .border(
                     1.dp,
-                    if (keyword.isBlank()) Color.White.copy(alpha = 0.08f) else BrandAccent.copy(alpha = 0.28f),
-                    RoundedCornerShape(18.dp)
+                    if (keyword.isBlank()) AppThemeTokens.mutedBorder() else BrandAccent.copy(alpha = 0.28f),
+                    AppThemeTokens.fieldShape()
                 )
                 .padding(horizontal = 14.dp),
             textStyle = TextStyle(
@@ -385,24 +383,23 @@ private fun TvHistoryList(
         ) {
             items(historyList) { item ->
                 Row(
-                    modifier = Modifier
-                        .clip(RoundedCornerShape(18.dp))
-                        .background(AppSurface.copy(alpha = 0.92f))
-                        .border(1.dp, Color.White.copy(alpha = 0.08f), RoundedCornerShape(18.dp))
-                        .padding(horizontal = 10.dp, vertical = 8.dp),
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Text(
-                        text = item,
-                        color = AppTextPrimary,
-                        fontSize = 13.sp,
-                        modifier = Modifier
-                            .weight(1f)
-                            .clickable(onClick = { onSearch(item) }),
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
-                    )
+                    TvSearchListItem(
+                        onClick = { onSearch(item) },
+                        modifier = Modifier.weight(1f)
+                    ) {
+                        Text(
+                            text = item,
+                            color = AppTextPrimary,
+                            fontSize = 13.sp,
+                            fontWeight = FontWeight.Medium,
+                            modifier = Modifier.weight(1f),
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                    }
                     SearchMiniButton(
                         text = "X",
                         onClick = { onRemoveHistory(item) },
@@ -419,32 +416,63 @@ private fun TvKeywordRow(
     text: String,
     onClick: () -> Unit
 ) {
+    TvSearchListItem(onClick = onClick) {
+        Text(
+            text = text,
+            color = AppTextPrimary,
+            fontSize = 13.sp,
+            fontWeight = FontWeight.Medium,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.weight(1f)
+        )
+        Text(
+            text = "搜索",
+            color = AppTextSecondary,
+            fontSize = 11.sp
+        )
+    }
+}
+
+@Composable
+private fun TvSearchListItem(
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+    content: @Composable RowScope.() -> Unit
+) {
+    val shape = RoundedCornerShape(8.dp)
     TvSurface(
         onClick = onClick,
-        shape = androidx.tv.material3.ClickableSurfaceDefaults.shape(RoundedCornerShape(18.dp))
+        modifier = modifier,
+        shape = ClickableSurfaceDefaults.shape(shape),
+        scale = ClickableSurfaceDefaults.scale(focusedScale = 1f),
+        border = ClickableSurfaceDefaults.border(
+            border = Border(
+                border = BorderStroke(1.dp, Color.White.copy(alpha = 0.08f)),
+                inset = 0.dp,
+                shape = shape
+            ),
+            focusedBorder = Border(
+                border = BorderStroke(2.dp, BrandPrimary.copy(alpha = 0.95f)),
+                inset = 0.dp,
+                shape = shape
+            ),
+            pressedBorder = Border(
+                border = BorderStroke(2.dp, BrandPrimary),
+                inset = 0.dp,
+                shape = shape
+            )
+        )
     ) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
                 .background(AppSurface.copy(alpha = 0.92f))
                 .padding(horizontal = 12.dp, vertical = 10.dp),
-            horizontalArrangement = Arrangement.SpaceBetween,
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Text(
-                text = text,
-                color = AppTextPrimary,
-                fontSize = 13.sp,
-                fontWeight = FontWeight.Medium,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-                modifier = Modifier.weight(1f)
-            )
-            Text(
-                text = "搜索",
-                color = AppTextSecondary,
-                fontSize = 11.sp
-            )
+            content()
         }
     }
 }
@@ -515,7 +543,7 @@ fun SearchHistoryScreen(
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
                     verticalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    historyList.forEach { history ->
+                    for (history in historyList) {
                         SearchHistoryPill(
                             text = history.keyword,
                             onSearch = { onHistoryClick(history.keyword) },
@@ -528,7 +556,7 @@ fun SearchHistoryScreen(
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
                     verticalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    historyList.forEach { history ->
+                    for (history in historyList) {
                         SearchActionChip(
                             text = history.keyword,
                             onClick = { onHistoryClick(history.keyword) }
@@ -604,16 +632,9 @@ private fun PhoneSearchBar(
         Box(
             modifier = Modifier
                 .weight(1f)
-                .clip(RoundedCornerShape(20.dp))
-                .background(
-                    Brush.horizontalGradient(
-                        colors = listOf(
-                            AppSurfaceVariant.copy(alpha = 0.98f),
-                            AppSurface.copy(alpha = 0.94f)
-                        )
-                    )
-                )
-                .border(1.dp, Color.White.copy(alpha = 0.08f), RoundedCornerShape(20.dp))
+                .clip(AppThemeTokens.fieldShape())
+                .background(AppThemeTokens.fieldBackground())
+                .border(1.dp, AppThemeTokens.mutedBorder(), AppThemeTokens.fieldShape())
                 .padding(horizontal = 14.dp, vertical = 9.dp)
         ) {
             Row(
@@ -713,7 +734,7 @@ private fun PhoneHistorySection(
                 horizontalArrangement = Arrangement.spacedBy(10.dp),
                 verticalArrangement = Arrangement.spacedBy(10.dp)
             ) {
-                historyList.forEach { keyword ->
+                for (keyword in historyList) {
                     SearchHistoryPill(
                         text = keyword,
                         onSearch = { onSearch(keyword) },
@@ -785,7 +806,7 @@ fun TagListScreen(
                     )
                 }
             } else {
-                groups.forEach { group ->
+                for (group in groups) {
                     TagItem(group, phoneLayout = phoneLayout) { wd ->
                         onItemClick(wd)
                     }
@@ -826,7 +847,7 @@ internal fun SearchMiniButton(
 ) {
     TvSurface(
         onClick = onClick,
-        shape = androidx.tv.material3.ClickableSurfaceDefaults.shape(RoundedCornerShape(16.dp))
+        shape = androidx.tv.material3.ClickableSurfaceDefaults.shape(RoundedCornerShape(8.dp))
     ) {
         Box(
             modifier = Modifier
@@ -869,7 +890,7 @@ fun TagItem(group: TagGroup, phoneLayout: Boolean = false, onClick: (String) -> 
             horizontalArrangement = Arrangement.spacedBy(8.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
-            group.tags.forEach { tag ->
+            for (tag in group.tags) {
                 SearchActionChip(
                     text = tag,
                     emphasize = group.title == "热门搜索",
@@ -885,18 +906,18 @@ private fun SearchSectionCard(
     modifier: Modifier = Modifier,
     accentBrush: Brush = Brush.verticalGradient(
         colors = listOf(
-            AppSurfaceVariant.copy(alpha = 0.96f),
-            AppSurface.copy(alpha = 0.88f)
+            Color.White.copy(alpha = 0.06f),
+            Color.White.copy(alpha = 0.03f)
         )
     ),
     content: @Composable () -> Unit
 ) {
     Column(
         modifier = modifier
-            .clip(RoundedCornerShape(24.dp))
+            .clip(AppThemeTokens.cardShape())
             .background(accentBrush)
-            .border(1.dp, Color.White.copy(alpha = 0.08f), RoundedCornerShape(24.dp))
-            .padding(18.dp),
+            .border(1.dp, AppThemeTokens.mutedBorder(), AppThemeTokens.cardShape())
+            .padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(0.dp)
     ) {
         content()
@@ -911,16 +932,9 @@ private fun SearchHistoryPill(
 ) {
     Row(
         modifier = Modifier
-            .clip(RoundedCornerShape(18.dp))
-            .background(
-                Brush.horizontalGradient(
-                    colors = listOf(
-                        AppSurfaceVariant.copy(alpha = 0.96f),
-                        AppSurface.copy(alpha = 0.92f)
-                    )
-                )
-            )
-            .border(1.dp, Color.White.copy(alpha = 0.08f), RoundedCornerShape(18.dp))
+            .clip(AppThemeTokens.buttonShape())
+            .background(Color.White.copy(alpha = 0.06f))
+            .border(1.dp, AppThemeTokens.mutedBorder(), AppThemeTokens.buttonShape())
             .padding(start = 12.dp, end = 6.dp, top = 8.dp, bottom = 8.dp),
         horizontalArrangement = Arrangement.spacedBy(6.dp),
         verticalAlignment = Alignment.CenterVertically
@@ -936,7 +950,7 @@ private fun SearchHistoryPill(
         )
         TvSurface(
             onClick = onRemove,
-            shape = androidx.tv.material3.ClickableSurfaceDefaults.shape(RoundedCornerShape(999.dp))
+            shape = androidx.tv.material3.ClickableSurfaceDefaults.shape(RoundedCornerShape(8.dp))
         ) {
             Box(
                 modifier = Modifier
@@ -964,7 +978,7 @@ private fun HotKeywordChip(
 ) {
     TvSurface(
         onClick = onClick,
-        shape = androidx.tv.material3.ClickableSurfaceDefaults.shape(RoundedCornerShape(18.dp))
+        shape = androidx.tv.material3.ClickableSurfaceDefaults.shape(RoundedCornerShape(8.dp))
     ) {
         Row(
             modifier = Modifier

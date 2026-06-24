@@ -7,8 +7,10 @@ import android.content.ContextWrapper
 import android.content.pm.ActivityInfo
 import android.media.AudioManager
 import androidx.activity.compose.BackHandler
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.focusable
 import androidx.compose.foundation.gestures.awaitEachGesture
@@ -65,6 +67,7 @@ import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.view.WindowCompat
@@ -74,9 +77,6 @@ import androidx.media3.common.Player
 import androidx.navigation.NavController
 import androidx.tv.material3.Icon
 import androidx.tv.material3.Text
-import com.loong.longtv.ui.common.DeviceClass
-import com.loong.longtv.ui.common.currentDeviceClass
-import com.loong.longtv.ui.phone.detail.PhoneFullscreenPlayerScreen
 import com.loong.longtv.ui.shared.widgets.AppButton
 import com.loong.longtv.ui.shared.widgets.TvSurface
 import com.loong.longtv.ui.theme.AppCardOverlay
@@ -86,7 +86,7 @@ import com.loong.longtv.ui.theme.AppTextPrimary
 import com.loong.longtv.ui.theme.AppTextSecondary
 import com.loong.longtv.ui.theme.BrandPrimary
 import com.loong.longtv.ui.theme.BrandPrimaryDark
-import com.loong.longtv.ui.tv.detail.TvFullscreenPlayerScreen
+import com.loong.player.PlayerInteractionDefaults
 import kotlinx.coroutines.delay
 import kotlin.math.abs
 import kotlin.math.atan2
@@ -133,40 +133,6 @@ internal sealed interface PhoneFeedbackOverlay {
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
-fun FullscreenPlayerScreen(
-    navController: NavController,
-    title: String,
-    videoUrl: String,
-    requestHeaders: Map<String, String>,
-    initialPositionMs: Long,
-    episodeIndex: Int,
-    episodeCount: Int,
-) {
-    when (currentDeviceClass()) {
-        DeviceClass.PHONE -> PhoneFullscreenPlayerScreen(
-            navController = navController,
-            title = title,
-            videoUrl = videoUrl,
-            requestHeaders = requestHeaders,
-            initialPositionMs = initialPositionMs,
-            episodeIndex = episodeIndex,
-            episodeCount = episodeCount
-        )
-
-        DeviceClass.TV -> TvFullscreenPlayerScreen(
-            navController = navController,
-            title = title,
-            videoUrl = videoUrl,
-            requestHeaders = requestHeaders,
-            initialPositionMs = initialPositionMs,
-            episodeIndex = episodeIndex,
-            episodeCount = episodeCount
-        )
-    }
-}
-
-@OptIn(ExperimentalLayoutApi::class)
-@Composable
 internal fun FullscreenPlayerContent(
     navController: NavController,
     title: String,
@@ -175,7 +141,12 @@ internal fun FullscreenPlayerContent(
     initialPositionMs: Long,
     episodeIndex: Int,
     episodeCount: Int,
-    isTv: Boolean
+    isTv: Boolean,
+    manageOrientation: Boolean = true,
+    onExitFullscreen: ((Long) -> Unit)? = null,
+    onSwitchEpisode: ((Int) -> Unit)? = null,
+    onPlaybackEnded: (() -> Unit)? = null,
+    onProgressChangedExternal: ((Long, Long) -> Unit)? = null
 ) {
     val context = LocalContext.current
     val activity = context.findActivity()
@@ -189,6 +160,7 @@ internal fun FullscreenPlayerContent(
     var overlayVisible by remember(title, videoUrl) { mutableStateOf(false) }
     var isPlaying by remember(title, videoUrl) { mutableStateOf(false) }
     var isBuffering by remember(title, videoUrl) { mutableStateOf(false) }
+    var playerReady by remember(title, videoUrl) { mutableStateOf(false) }
     var playbackError by remember(title, videoUrl) { mutableStateOf<String?>(null) }
     var interactionVersion by remember(title, videoUrl) { mutableIntStateOf(0) }
     var playbackSpeed by remember(title, videoUrl) { mutableFloatStateOf(1.0f) }
@@ -222,17 +194,29 @@ internal fun FullscreenPlayerContent(
     val currentDisplayPosition = if (isScrubbing) scrubPositionMs else currentPositionMs
     val progress = playbackProgress(currentDisplayPosition, durationMs)
     val brightnessPercent = (brightnessLevel * 100f).roundToInt().coerceIn(0, 100)
-    val playbackStateLabel = when {
-        playbackError != null -> "播放异常"
-        isBuffering -> "缓冲中"
-        isPlaying -> "播放中"
-        else -> "已暂停"
-    }
-    val overlayAutoHideMs = if (isTv) 5_000L else 3_000L
+    val overlayAutoHideMs = PlayerInteractionDefaults.ControlsAutoHideMs
 
     fun registerInteraction() {
         overlayVisible = true
         interactionVersion += 1
+    }
+
+    fun showControls() {
+        overlayVisible = true
+        interactionVersion += 1
+    }
+
+    fun hideControls() {
+        activePanel = null
+        overlayVisible = false
+    }
+
+    fun toggleControls() {
+        if (overlayVisible || activePanel != null) {
+            hideControls()
+        } else {
+            showControls()
+        }
     }
 
     fun showPhoneFeedback(
@@ -257,6 +241,12 @@ internal fun FullscreenPlayerContent(
     }
 
     fun seekToPosition(positionMs: Long) {
+        val duration = durationMs.takeIf { it > 0 } ?: Long.MAX_VALUE
+        currentPositionMs = positionMs.coerceIn(0L, duration)
+        if (!isScrubbing) {
+            scrubPositionMs = currentPositionMs
+        }
+        onProgressChangedExternal?.invoke(currentPositionMs, durationMs)
         controlState.seekTo(positionMs)
         registerInteraction()
     }
@@ -293,16 +283,8 @@ internal fun FullscreenPlayerContent(
         )
     }
 
-    fun toggleOverlayVisibility() {
-        overlayVisible = !overlayVisible
-        if (overlayVisible) {
-            interactionVersion += 1
-        }
-    }
-
     fun showTvControls() {
-        overlayVisible = true
-        interactionVersion += 1
+        showControls()
     }
 
     fun refreshTvMenuInteraction() {
@@ -350,8 +332,7 @@ internal fun FullscreenPlayerContent(
     }
 
     fun hideTvControls() {
-        activePanel = null
-        overlayVisible = false
+        hideControls()
     }
 
     fun handleTvBack(): Boolean {
@@ -371,6 +352,10 @@ internal fun FullscreenPlayerContent(
     }
 
     fun exitFullscreen() {
+        onExitFullscreen?.let { exit ->
+            exit(currentPositionMs)
+            return
+        }
         navController.previousBackStackEntry
             ?.savedStateHandle
             ?.set("fullscreen_position", currentPositionMs)
@@ -378,6 +363,15 @@ internal fun FullscreenPlayerContent(
     }
 
     fun switchEpisode(targetIndex: Int) {
+        activePanel = null
+        phoneFeedbackOverlay = null
+        gestureInProgress = false
+        overlayVisible = true
+        interactionVersion += 1
+        onSwitchEpisode?.let { switch ->
+            switch(targetIndex)
+            return
+        }
         navController.previousBackStackEntry
             ?.savedStateHandle
             ?.set("fullscreen_target_episode_index", targetIndex)
@@ -388,6 +382,15 @@ internal fun FullscreenPlayerContent(
             ?.savedStateHandle
             ?.set("fullscreen_position", 0L)
         navController.popBackStack()
+    }
+
+    fun playNextEpisodeFromCurrent() {
+        val targetIndex = episodeIndex + 1
+        if (targetIndex in 0 until episodeCount) {
+            switchEpisode(targetIndex)
+        } else {
+            onPlaybackEnded?.invoke()
+        }
     }
 
     fun positionFromBarOffset(offsetX: Float): Long {
@@ -424,8 +427,10 @@ internal fun FullscreenPlayerContent(
         }
     }
 
-    DisposableEffect(activity) {
+    DisposableEffect(activity, manageOrientation) {
         if (activity == null) {
+            onDispose { }
+        } else if (!manageOrientation) {
             onDispose { }
         } else {
             val window = activity.window
@@ -476,15 +481,24 @@ internal fun FullscreenPlayerContent(
     LaunchedEffect(phoneFeedbackOverlay, phoneFeedbackVersion, gestureInProgress) {
         val current = phoneFeedbackOverlay ?: return@LaunchedEffect
         val timeout = when (current) {
-            is PhoneFeedbackOverlay.Adjustment -> 1_000L
-            is PhoneFeedbackOverlay.Seek -> if (gestureInProgress) Long.MAX_VALUE else 500L
-            is PhoneFeedbackOverlay.PlayPause -> 500L
+            is PhoneFeedbackOverlay.Adjustment -> PlayerInteractionDefaults.FeedbackAutoHideMs
+            is PhoneFeedbackOverlay.Seek -> if (gestureInProgress) null else PlayerInteractionDefaults.SeekFeedbackAutoHideMs
+            is PhoneFeedbackOverlay.PlayPause -> PlayerInteractionDefaults.PlayPauseFeedbackAutoHideMs
         }
-        if (timeout != Long.MAX_VALUE) {
-            delay(timeout)
-            if (phoneFeedbackOverlay == current) {
-                phoneFeedbackOverlay = null
-            }
+        if (timeout == null) return@LaunchedEffect
+        delay(timeout)
+        if (phoneFeedbackOverlay == current) {
+            phoneFeedbackOverlay = null
+        }
+    }
+
+    LaunchedEffect(gestureInProgress, phoneFeedbackVersion) {
+        if (gestureInProgress || phoneFeedbackOverlay !is PhoneFeedbackOverlay.Seek) {
+            return@LaunchedEffect
+        }
+        delay(PlayerInteractionDefaults.SeekFeedbackAutoHideMs)
+        if (phoneFeedbackOverlay is PhoneFeedbackOverlay.Seek) {
+            phoneFeedbackOverlay = null
         }
     }
 
@@ -492,6 +506,14 @@ internal fun FullscreenPlayerContent(
         if (isTv && playbackError == null) {
             tvFocusRequester.requestFocus()
         }
+    }
+
+    LaunchedEffect(videoUrl, episodeIndex) {
+        activePanel = null
+        gestureInProgress = false
+        isScrubbing = false
+        phoneFeedbackOverlay = null
+        transientMessage = null
     }
 
     LaunchedEffect(isTv, overlayVisible, activePanel, playbackError) {
@@ -581,6 +603,7 @@ internal fun FullscreenPlayerContent(
             videoUrl = videoUrl,
             requestHeaders = requestHeaders,
             initialPositionMs = initialPositionMs,
+            repeat = false,
             showController = false,
             enableNativeController = false,
             sharedSessionEnabled = true,
@@ -589,33 +612,46 @@ internal fun FullscreenPlayerContent(
             onProgressChanged = { position, duration ->
                 currentPositionMs = position
                 durationMs = duration
+                onProgressChangedExternal?.invoke(position, duration)
                 if (!isScrubbing) {
                     scrubPositionMs = position
                 }
             },
             onPlaybackStateChanged = { state ->
                 isBuffering = state == Player.STATE_BUFFERING
+                if (state == Player.STATE_READY) {
+                    playerReady = true
+                }
             },
             onPlayingChanged = { playing ->
                 isPlaying = playing
             },
+            onPlaybackEnded = ::playNextEpisodeFromCurrent,
             onPlaybackError = { message ->
                 playbackError = message
                 overlayVisible = true
             },
-            onSurfaceTap = {
-                toggleOverlayVisibility()
-            }
+            onSurfaceTap = null
         )
+
+        val seekFeedbackVisible = gestureInProgress ||
+            isScrubbing ||
+            phoneFeedbackOverlay is PhoneFeedbackOverlay.Seek
+        if (playbackError == null && !isPlaying && !seekFeedbackVisible && (!playerReady || isBuffering)) {
+            PlayerLoadingOverlay(
+                modifier = Modifier.matchParentSize()
+            )
+        }
 
         if (!isTv && playbackError == null) {
             PhoneFullscreenGestureLayer(
                 modifier = Modifier.fillMaxSize(),
+                resetKey = "$videoUrl#$episodeIndex",
                 durationMs = durationMs,
                 currentPositionMs = currentPositionMs,
                 brightnessPercent = brightnessPercent,
                 volumePercent = volumePercent,
-                onSingleTap = ::toggleOverlayVisibility,
+                onSingleTap = ::toggleControls,
                 onDoubleTap = ::togglePlayPause,
                 onGestureStart = {
                     gestureInProgress = true
@@ -628,7 +664,10 @@ internal fun FullscreenPlayerContent(
                         PhoneGestureType.BRIGHTNESS,
                         PhoneGestureType.VOLUME -> phoneFeedbackVersion += 1
 
-                        PhoneGestureType.SEEK -> commitPreviewSeek()
+                        PhoneGestureType.SEEK -> {
+                            commitPreviewSeek()
+                            phoneFeedbackVersion += 1
+                        }
                     }
                 },
                 onBrightnessChange = ::updateBrightnessPercent,
@@ -677,8 +716,8 @@ internal fun FullscreenPlayerContent(
 
         if (overlayVisible) {
             val topBarHeight = if (isTv) 64.dp else 48.dp
-            val progressBarHeight = if (isTv) 72.dp else 40.dp
-            val bottomBarHeight = if (isTv) 80.dp else 56.dp
+            val progressBarHeight = if (isTv) 72.dp else 42.dp
+            val bottomBarHeight = if (isTv) 80.dp else 52.dp
             val edgePadding = if (isTv) 28.dp else 16.dp
 
             Column(
@@ -727,10 +766,10 @@ internal fun FullscreenPlayerContent(
                     }
                     .background(
                         Brush.verticalGradient(
-                            colors = listOf(Color.Transparent, Color(0xAA07101C), Color(0xF007101C))
+                            colors = listOf(Color.Transparent, Color(0xB0060D16), Color(0xF2060D16))
                         )
                     )
-                    .padding(horizontal = edgePadding, vertical = 12.dp)
+                    .padding(horizontal = edgePadding, vertical = if (isTv) 12.dp else 10.dp)
             ) {
                 val panel = activePanel
                 if (panel != null) {
@@ -802,16 +841,20 @@ internal fun FullscreenPlayerContent(
                                         scrubPositionMs = positionFromBarOffset(offset.x)
                                         registerInteraction()
                                     },
-                                    onDragCancel = { isScrubbing = false },
-                                    onDragEnd = {
-                                        if (isScrubbing) {
-                                            seekToPosition(scrubPositionMs)
-                                        }
-                                        isScrubbing = false
+                                onDragCancel = {
+                                    isScrubbing = false
+                                    registerInteraction()
+                                },
+                                onDragEnd = {
+                                    if (isScrubbing) {
+                                        seekToPosition(scrubPositionMs)
+                                    }
+                                    isScrubbing = false
                                     }
                                 ) { change, _ ->
                                     if (durationMs <= 0) return@detectDragGestures
                                     scrubPositionMs = positionFromBarOffset(change.position.x)
+                                    registerInteraction()
                                 }
                             },
                         contentAlignment = Alignment.CenterStart
@@ -830,7 +873,7 @@ internal fun FullscreenPlayerContent(
                                 .clip(RoundedCornerShape(999.dp))
                                 .background(
                                     Brush.horizontalGradient(
-                                        listOf(BrandPrimary, BrandPrimaryDark)
+                                        listOf(BrandPrimary, Color(0xFF7CC7FF))
                                     )
                                 )
                         )
@@ -842,7 +885,7 @@ internal fun FullscreenPlayerContent(
                                 modifier = Modifier
                                     .size(if (isTv) 14.dp else 10.dp)
                                     .clip(RoundedCornerShape(999.dp))
-                                    .background(Color.White)
+                                    .background(Color(0xFFE7ECF3))
                             )
                         }
                     }
@@ -859,9 +902,9 @@ internal fun FullscreenPlayerContent(
                     modifier = Modifier
                         .fillMaxWidth()
                         .horizontalScroll(rememberScrollState())
-                        .padding(start = if (isTv) 10.dp else 0.dp, end = 8.dp)
+                        .padding(start = if (isTv) 10.dp else 0.dp, end = if (isTv) 8.dp else 0.dp)
                         .height(bottomBarHeight),
-                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                    horizontalArrangement = Arrangement.spacedBy(if (isTv) 12.dp else 8.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     if (episodeCount > 1) {
@@ -961,10 +1004,12 @@ internal fun FullscreenPlayerContent(
 @Composable
 internal fun PhoneFullscreenGestureLayer(
     modifier: Modifier,
+    resetKey: Any? = Unit,
     durationMs: Long,
     currentPositionMs: Long,
     brightnessPercent: Int,
     volumePercent: Int,
+    reservedBottom: Dp = 80.dp,
     onSingleTap: () -> Unit,
     onDoubleTap: () -> Unit,
     onGestureStart: () -> Unit,
@@ -976,15 +1021,15 @@ internal fun PhoneFullscreenGestureLayer(
 ) {
     Box(
         modifier = modifier
-            .pointerInput(onSingleTap, onDoubleTap) {
+            .pointerInput(resetKey, onSingleTap, onDoubleTap) {
                 detectTapGestures(
                     onTap = { onSingleTap() },
                     onDoubleTap = { onDoubleTap() }
                 )
             }
-            .pointerInput(durationMs, currentPositionMs, brightnessPercent, volumePercent) {
+            .pointerInput(resetKey, durationMs, currentPositionMs, brightnessPercent, volumePercent) {
                 val reservedLeftEdgePx = 15f
-                val reservedBottomPx = 80.dp.toPx()
+                val reservedBottomPx = reservedBottom.toPx()
                 val triggerDistancePx = 10f
                 val verticalSensitivityPx = 8f
                 awaitEachGesture {
@@ -1010,92 +1055,100 @@ internal fun PhoneFullscreenGestureLayer(
                     var gestureType: PhoneGestureType? = null
                     var boundaryTriggered = false
 
-                    while (true) {
-                        val event = awaitPointerEvent()
-                        val change = event.changes.firstOrNull { it.id == pointerId } ?: break
-                        if (!change.pressed) {
-                            if (gestureType != null) {
-                                onGestureEnd(gestureType)
-                            }
-                            break
-                        }
-
-                        val delta = change.position - change.previousPosition
-                        totalX += delta.x
-                        totalY += delta.y
-
-                        if (gestureType == null) {
-                            val absX = abs(totalX)
-                            val absY = abs(totalY)
-                            if (hypot(absX.toDouble(), absY.toDouble()) < triggerDistancePx) {
-                                continue
-                            }
-                            val angle = Math.toDegrees(atan2(absY.toDouble(), absX.toDouble())).toFloat()
-                            gestureType = when {
-                                angle < 30f -> PhoneGestureType.SEEK
-                                angle > 60f && zone != null -> zone
-                                absX >= absY -> PhoneGestureType.SEEK
-                                zone != null -> zone
-                                else -> PhoneGestureType.SEEK
-                            }
-                            onGestureStart()
-                        }
-
-                        when (gestureType) {
-                            PhoneGestureType.BRIGHTNESS -> {
-                                val targetPercent = (brightnessAnchor + (-totalY / verticalSensitivityPx))
-                                    .roundToInt()
-                                    .coerceIn(0, 100)
-                                onBrightnessChange(targetPercent)
-                                val atBoundary = targetPercent == 0 || targetPercent == 100
-                                if (atBoundary && !boundaryTriggered) {
-                                    onBoundaryReached()
-                                    boundaryTriggered = true
-                                } else if (!atBoundary) {
-                                    boundaryTriggered = false
+                    var gestureEnded = false
+                    try {
+                        while (true) {
+                            val event = awaitPointerEvent()
+                            val change = event.changes.firstOrNull { it.id == pointerId } ?: break
+                            if (!change.pressed) {
+                                gestureType?.let {
+                                    onGestureEnd(it)
+                                    gestureEnded = true
                                 }
+                                break
                             }
 
-                            PhoneGestureType.VOLUME -> {
-                                val targetPercent = (volumeAnchor + (-totalY / verticalSensitivityPx))
-                                    .roundToInt()
-                                    .coerceIn(0, 100)
-                                onVolumeChange(targetPercent)
-                                val atBoundary = targetPercent == 0 || targetPercent == 100
-                                if (atBoundary && !boundaryTriggered) {
-                                    onBoundaryReached()
-                                    boundaryTriggered = true
-                                } else if (!atBoundary) {
-                                    boundaryTriggered = false
-                                }
-                            }
+                            val delta = change.position - change.previousPosition
+                            totalX += delta.x
+                            totalY += delta.y
 
-                            PhoneGestureType.SEEK -> {
-                                if (durationMs <= 0L) {
+                            if (gestureType == null) {
+                                val absX = abs(totalX)
+                                val absY = abs(totalY)
+                                if (hypot(absX.toDouble(), absY.toDouble()) < triggerDistancePx) {
                                     continue
                                 }
-                                val previewDeltaMs = ((totalX / size.width) * durationMs * 0.8f).roundToLong()
-                                val targetMs = (seekAnchorMs + previewDeltaMs).coerceIn(0L, durationMs)
-                                val reachedEdgeMessage = when {
-                                    targetMs == 0L && previewDeltaMs < 0L -> "已至开头"
-                                    targetMs == durationMs && previewDeltaMs > 0L -> "已至结尾"
-                                    else -> null
+                                val angle = Math.toDegrees(atan2(absY.toDouble(), absX.toDouble())).toFloat()
+                                gestureType = when {
+                                    angle < 30f -> PhoneGestureType.SEEK
+                                    angle > 60f && zone != null -> zone
+                                    absX >= absY -> PhoneGestureType.SEEK
+                                    zone != null -> zone
+                                    else -> PhoneGestureType.SEEK
                                 }
-                                onSeekPreview(
-                                    targetMs,
-                                    targetMs - seekAnchorMs,
-                                    reachedEdgeMessage
-                                )
-                                val atBoundary = reachedEdgeMessage != null
-                                if (atBoundary && !boundaryTriggered) {
-                                    onBoundaryReached()
-                                    boundaryTriggered = true
-                                } else if (!atBoundary) {
-                                    boundaryTriggered = false
+                                onGestureStart()
+                            }
+
+                            when (gestureType) {
+                                PhoneGestureType.BRIGHTNESS -> {
+                                    val targetPercent = (brightnessAnchor + (-totalY / verticalSensitivityPx))
+                                        .roundToInt()
+                                        .coerceIn(0, 100)
+                                    onBrightnessChange(targetPercent)
+                                    val atBoundary = targetPercent == 0 || targetPercent == 100
+                                    if (atBoundary && !boundaryTriggered) {
+                                        onBoundaryReached()
+                                        boundaryTriggered = true
+                                    } else if (!atBoundary) {
+                                        boundaryTriggered = false
+                                    }
+                                }
+
+                                PhoneGestureType.VOLUME -> {
+                                    val targetPercent = (volumeAnchor + (-totalY / verticalSensitivityPx))
+                                        .roundToInt()
+                                        .coerceIn(0, 100)
+                                    onVolumeChange(targetPercent)
+                                    val atBoundary = targetPercent == 0 || targetPercent == 100
+                                    if (atBoundary && !boundaryTriggered) {
+                                        onBoundaryReached()
+                                        boundaryTriggered = true
+                                    } else if (!atBoundary) {
+                                        boundaryTriggered = false
+                                    }
+                                }
+
+                                PhoneGestureType.SEEK -> {
+                                    if (durationMs <= 0L) {
+                                        continue
+                                    }
+                                    val previewDeltaMs = ((totalX / size.width) * durationMs * 0.8f).roundToLong()
+                                    val targetMs = (seekAnchorMs + previewDeltaMs).coerceIn(0L, durationMs)
+                                    val reachedEdgeMessage = when {
+                                        targetMs == 0L && previewDeltaMs < 0L -> "已至开头"
+                                        targetMs == durationMs && previewDeltaMs > 0L -> "已至结尾"
+                                        else -> null
+                                    }
+                                    onSeekPreview(
+                                        targetMs,
+                                        targetMs - seekAnchorMs,
+                                        reachedEdgeMessage
+                                    )
+                                    val atBoundary = reachedEdgeMessage != null
+                                    if (atBoundary && !boundaryTriggered) {
+                                        onBoundaryReached()
+                                        boundaryTriggered = true
+                                    } else if (!atBoundary) {
+                                        boundaryTriggered = false
+                                    }
                                 }
                             }
+                            change.consume()
                         }
-                        change.consume()
+                    } finally {
+                        if (!gestureEnded) {
+                            gestureType?.let(onGestureEnd)
+                        }
                     }
                 }
             }
@@ -1330,7 +1383,9 @@ private fun PlayerOptionPanel(
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .background(AppCardOverlay, RoundedCornerShape(28.dp))
+            .clip(RoundedCornerShape(12.dp))
+            .background(Color(0xEE060D16))
+            .border(BorderStroke(1.dp, Color.White.copy(alpha = 0.10f)), RoundedCornerShape(12.dp))
             .padding(horizontal = 16.dp, vertical = 14.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
@@ -1349,7 +1404,10 @@ private fun PlayerOptionPanel(
                 fontSize = if (isTv) 18.sp else 15.sp,
                 fontWeight = FontWeight.SemiBold
             )
-            AppButton(text = "收起", onClick = onClose)
+            PlayerPanelCloseButton(
+                large = isTv,
+                onClick = onClose
+            )
         }
         when (panel) {
             BottomPanel.SPEED -> {
@@ -1357,7 +1415,7 @@ private fun PlayerOptionPanel(
                     horizontalArrangement = Arrangement.spacedBy(10.dp),
                     verticalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
-                    speedOptions.forEach { option ->
+                    for (option in speedOptions) {
                         PlayerPanelChip(
                             modifier = if (isTv && option == playbackSpeed) Modifier.focusRequester(speedFocusRequester) else Modifier,
                             text = formatPlaybackSpeed(option),
@@ -1374,7 +1432,7 @@ private fun PlayerOptionPanel(
                     horizontalArrangement = Arrangement.spacedBy(10.dp),
                     verticalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
-                    qualityOptions.forEach { option ->
+                    for (option in qualityOptions) {
                         PlayerPanelChip(
                             modifier = if (isTv && option == selectedQuality) Modifier.focusRequester(qualityFocusRequester) else Modifier,
                             text = option,
@@ -1392,11 +1450,20 @@ private fun PlayerOptionPanel(
                     verticalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
                     repeat(episodeCount) { index ->
+                        val focusModifier = if (isTv && index == episodeIndex) {
+                            Modifier.focusRequester(episodeFocusRequester)
+                        } else {
+                            Modifier
+                        }
                         PlayerPanelChip(
-                            modifier = if (isTv && index == episodeIndex) Modifier.focusRequester(episodeFocusRequester) else Modifier,
+                            modifier = Modifier
+                                .width(if (isTv) 108.dp else 78.dp)
+                                .height(if (isTv) 48.dp else 38.dp)
+                                .then(focusModifier),
                             text = "第${index + 1}集",
                             selected = index == episodeIndex,
                             large = isTv,
+                            fillContainer = true,
                             onClick = { onEpisodeSelected(index) }
                         )
                     }
@@ -1407,21 +1474,57 @@ private fun PlayerOptionPanel(
 }
 
 @Composable
+private fun PlayerPanelCloseButton(
+    large: Boolean,
+    onClick: () -> Unit
+) {
+    TvSurface(onClick = onClick) {
+        Box(
+            modifier = Modifier
+                .clip(RoundedCornerShape(8.dp))
+                .background(Color(0xFF101A26).copy(alpha = 0.84f))
+                .border(BorderStroke(1.dp, Color.White.copy(alpha = 0.12f)), RoundedCornerShape(8.dp))
+                .padding(horizontal = if (large) 16.dp else 12.dp, vertical = if (large) 10.dp else 7.dp),
+            contentAlignment = Alignment.Center
+        ) {
+            Text(
+                text = "收起",
+                color = Color(0xFFE7ECF3),
+                fontSize = if (large) 15.sp else 12.sp,
+                fontWeight = FontWeight.SemiBold
+            )
+        }
+    }
+}
+
+@Composable
 private fun PlayerPanelChip(
     modifier: Modifier = Modifier,
     text: String,
     selected: Boolean,
     large: Boolean,
+    fillContainer: Boolean = false,
     onClick: () -> Unit
 ) {
     TvSurface(
         onClick = onClick,
         modifier = modifier
     ) {
+        val background = if (selected) {
+            BrandPrimary.copy(alpha = 0.20f)
+        } else {
+            Color(0xFF111B28).copy(alpha = 0.82f)
+        }
+        val borderColor = if (selected) {
+            BrandPrimary.copy(alpha = 0.48f)
+        } else {
+            Color.White.copy(alpha = 0.10f)
+        }
         Box(
-            modifier = Modifier
-                .clip(RoundedCornerShape(18.dp))
-                .background(if (selected) BrandPrimary.copy(alpha = 0.18f) else Color.White.copy(alpha = 0.06f))
+            modifier = (if (fillContainer) Modifier.fillMaxSize() else Modifier)
+                .clip(RoundedCornerShape(8.dp))
+                .background(background)
+                .border(BorderStroke(1.dp, borderColor), RoundedCornerShape(8.dp))
                 .padding(horizontal = if (large) 18.dp else 14.dp, vertical = if (large) 12.dp else 10.dp),
             contentAlignment = Alignment.Center
         ) {
@@ -1444,21 +1547,30 @@ private fun PlayerActionChip(
     onClick: () -> Unit
 ) {
     TvSurface(
-        onClick = onClick,
+        onClick = { if (enabled) onClick() },
         modifier = modifier
     ) {
+        val background = if (enabled) {
+            Color(0xFF101A26).copy(alpha = 0.84f)
+        } else {
+            Color(0xFF101A26).copy(alpha = 0.42f)
+        }
+        val borderColor = if (enabled) {
+            Color.White.copy(alpha = 0.12f)
+        } else {
+            Color.White.copy(alpha = 0.05f)
+        }
         Box(
             modifier = Modifier
-                .clip(RoundedCornerShape(20.dp))
-                .background(
-                    if (enabled) Color.White.copy(alpha = 0.08f) else Color.White.copy(alpha = 0.04f)
-                )
-                .padding(horizontal = if (large) 18.dp else 12.dp, vertical = if (large) 14.dp else 10.dp),
+                .clip(RoundedCornerShape(8.dp))
+                .background(background)
+                .border(BorderStroke(1.dp, borderColor), RoundedCornerShape(8.dp))
+                .padding(horizontal = if (large) 18.dp else 12.dp, vertical = if (large) 14.dp else 9.dp),
             contentAlignment = Alignment.Center
         ) {
             Text(
                 text = text,
-                color = if (enabled) AppTextPrimary else AppTextPrimary.copy(alpha = 0.4f),
+                color = if (enabled) Color(0xFFE7ECF3) else AppTextPrimary.copy(alpha = 0.35f),
                 fontSize = if (large) 16.sp else 12.sp,
                 maxLines = 1
             )
@@ -1503,7 +1615,7 @@ internal fun PlayerTopInlineBar(
     ) {
         Row(
             modifier = Modifier
-                .clip(RoundedCornerShape(16.dp))
+                .clip(RoundedCornerShape(8.dp))
                 .clickable(onClick = onBack)
                 .padding(horizontal = 4.dp, vertical = 8.dp),
             verticalAlignment = Alignment.CenterVertically

@@ -115,9 +115,12 @@ class VideoDetailViewModel @Inject constructor(
             val lines = detail.getPlayLines()
             val history = watchHistoryRepository.find(state.siteKey, detail.id)
             val source = lines.getOrNull(index) ?: return@launch
-            val episodeIndex = source.episodes
-                .indexOfFirst { it.url == history?.episodeUrl }
-                .takeIf { it >= 0 } ?: 0
+            val episodeIndex = state.selectedEpisodeIndex
+                .takeIf { it in source.episodes.indices }
+                ?: source.episodes
+                    .indexOfFirst { it.url == history?.episodeUrl }
+                    .takeIf { it >= 0 }
+                ?: 0
             val resumePosition = if (history?.sourceName == source.flag) history?.positionMs ?: 0 else 0
             _uiState.update {
                 it.copy(
@@ -127,6 +130,9 @@ class VideoDetailViewModel @Inject constructor(
                     resumePositionMs = resumePosition,
                     error = null
                 )
+            }
+            if (source.episodes.isNotEmpty()) {
+                playEpisode(source, episodeIndex, PlayRequestMode.KeepSelected)
             }
         }
     }
