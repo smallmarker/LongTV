@@ -4,7 +4,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -27,7 +27,7 @@ fun SearchResultTvScreen(
     val loading by viewModel.searchLoading.collectAsStateWithLifecycle()
     val error by viewModel.searchError.collectAsStateWithLifecycle()
     val categories = videoMap.keys.toList()
-    var selectedCategory by remember { mutableStateOf(categories.firstOrNull()) }
+    var selectedCategory by rememberSaveable(keyword) { mutableStateOf<String?>(null) }
 
     LaunchedEffect(videoMap) {
         if (selectedCategory !in categories) {
@@ -47,7 +47,7 @@ fun SearchResultTvScreen(
             error = error,
             compact = false,
             phoneLayout = false,
-            onRetry = { viewModel.searchContent(keyword) },
+            onRetry = { viewModel.searchContent(keyword, force = true) },
             onSelectCategory = { selectedCategory = it }
         )
     }

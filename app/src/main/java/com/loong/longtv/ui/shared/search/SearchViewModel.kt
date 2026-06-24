@@ -59,6 +59,8 @@ class SearchViewModel @Inject constructor(
     private val _searchError = MutableStateFlow<String?>(null)
     val searchError = _searchError.asStateFlow()
 
+    private var lastSearchKeyword = ""
+
     val history = dao.getAll().stateIn(
         scope = viewModelScope,
         started = SharingStarted.Eagerly,
@@ -105,7 +107,14 @@ class SearchViewModel @Inject constructor(
         }
     }
 
-    fun searchContent(wd: String) {
+    fun searchContent(wd: String, force: Boolean = false) {
+        val keyword = wd.trim()
+        if (keyword.isBlank()) return
+        if (!force && keyword == lastSearchKeyword && (_searchLoading.value || _searchResult.value.isNotEmpty())) {
+            return
+        }
+        lastSearchKeyword = keyword
+
         viewModelScope.launch {
             _searchLoading.value = true
             _searchError.value = null
@@ -121,7 +130,7 @@ class SearchViewModel @Inject constructor(
             supervisorScope {
                 val tasks = searchableSites.map { site ->
                     async {
-                        val result = engine.sourceRepository.search(site, wd, timeoutMs = searchTimeoutMs)
+                        val result = engine.sourceRepository.search(site, keyword, timeoutMs = searchTimeoutMs)
                         val list: List<VodInfo> = result.getOrElse {
                             Log.w(TAG, "search failed: ${site.key}", it)
                             return@async site to emptyList<VodInfo>()
@@ -157,7 +166,7 @@ class SearchViewModel @Inject constructor(
             if (_searchResult.value.isEmpty()) {
                 _searchError.value = "没有搜索到结果，或者当前启用站点暂时不可用"
             }
-            addKeyword(wd)
+            addKeyword(keyword)
         }
     }
 

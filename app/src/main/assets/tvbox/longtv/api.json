@@ -12,6 +12,18 @@
             "ext": {
                 "url": "http://v.rbotv.cn"
             }
+        },
+        {
+            "key": "小蜜蜂影院",
+            "name": "🐝小蜜蜂🔹影视",
+            "type": 3,
+            "api": "csp_Xmfyy",
+            "searchable": 1,
+            "quickSearch": 1,
+            "filterable": 1,
+            "ext": {
+                "url": "https://www.xmfyy.cc"
+            }
         }
     ]
 }
