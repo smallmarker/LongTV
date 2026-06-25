@@ -1,13 +1,15 @@
-package com.loong.longtv.ui.tv.detail
+package com.loong.player
 
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
-import com.loong.player.ComposeVideoPlayer
-import com.loong.player.PlayerResizeMode
-import com.loong.longtv.ui.shared.detail.PlayerControlState
+
+enum class PlayerInputMode {
+    Touch,
+    Remote
+}
 
 @Composable
-fun TvVideoPlayerView(
+fun UnifiedVideoPlayer(
     modifier: Modifier,
     videoUrl: String,
     requestHeaders: Map<String, String> = emptyMap(),
@@ -18,6 +20,7 @@ fun TvVideoPlayerView(
     enableNativeController: Boolean = true,
     sharedSessionEnabled: Boolean = false,
     sharedSessionReleaseDelayMs: Long = 1_500L,
+    inputMode: PlayerInputMode = PlayerInputMode.Touch,
     resizeMode: PlayerResizeMode = PlayerResizeMode.Fit,
     controlState: PlayerControlState? = null,
     onProgressChanged: (Long, Long) -> Unit = { _, _ -> },
@@ -39,7 +42,7 @@ fun TvVideoPlayerView(
         enableNativeController = enableNativeController,
         sharedSessionEnabled = sharedSessionEnabled,
         sharedSessionReleaseDelayMs = sharedSessionReleaseDelayMs,
-        touchControllerEnabled = false,
+        touchControllerEnabled = inputMode == PlayerInputMode.Touch,
         resizeMode = resizeMode,
         controlState = controlState,
         onProgressChanged = onProgressChanged,

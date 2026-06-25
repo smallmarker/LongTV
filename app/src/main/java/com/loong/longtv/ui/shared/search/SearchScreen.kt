@@ -574,11 +574,14 @@ internal fun PhoneSearchLayout(
     onKeywordChange: (String) -> Unit,
     historyList: List<String>,
     hotKeywords: List<String>,
+    suggestionList: List<String>,
+    suggestionLoading: Boolean,
     onBack: () -> Unit,
     onSearch: (String) -> Unit,
     onClearHistory: () -> Unit,
     onRemoveHistory: (String) -> Unit
 ) {
+    val trimmedKeyword = keyword.trim()
     Column(
         modifier = Modifier
             .verticalScroll(rememberScrollState())
@@ -592,17 +595,25 @@ internal fun PhoneSearchLayout(
             onSearch = onSearch
         )
 
-        PhoneHistorySection(
-            historyList = historyList,
-            onSearch = onSearch,
-            onClearHistory = onClearHistory,
-            onRemoveHistory = onRemoveHistory
-        )
+        if (trimmedKeyword.isNotBlank()) {
+            PhoneSuggestionSection(
+                suggestionList = suggestionList,
+                suggestionLoading = suggestionLoading,
+                onSearch = onSearch
+            )
+        } else {
+            PhoneHistorySection(
+                historyList = historyList,
+                onSearch = onSearch,
+                onClearHistory = onClearHistory,
+                onRemoveHistory = onRemoveHistory
+            )
 
-        PhoneHotSearchSection(
-            hotKeywords = hotKeywords,
-            onSearch = onSearch
-        )
+            PhoneHotSearchSection(
+                hotKeywords = hotKeywords,
+                onSearch = onSearch
+            )
+        }
     }
 }
 
@@ -690,6 +701,49 @@ private fun PhoneSearchBar(
             text = "搜索",
             onClick = { onSearch(keyword.trim()) }
         )
+    }
+}
+
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun PhoneSuggestionSection(
+    suggestionList: List<String>,
+    suggestionLoading: Boolean,
+    onSearch: (String) -> Unit
+) {
+    SearchSectionCard {
+        Text(
+            text = "猜你想搜",
+            color = AppTextPrimary,
+            fontSize = 18.sp,
+            fontWeight = FontWeight.SemiBold
+        )
+
+        Spacer(modifier = Modifier.height(12.dp))
+
+        if (suggestionLoading) {
+            SearchEmptyHint(
+                title = "联想加载中",
+                subtitle = "正在从当前站点获取相关结果..."
+            )
+        } else if (suggestionList.isEmpty()) {
+            SearchEmptyHint(
+                title = "暂无联想结果",
+                subtitle = "可以继续输入更多内容，或直接搜索当前关键词。"
+            )
+        } else {
+            FlowRow(
+                horizontalArrangement = Arrangement.spacedBy(10.dp),
+                verticalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                suggestionList.take(10).forEach { keyword ->
+                    SearchActionChip(
+                        text = keyword,
+                        onClick = { onSearch(keyword) }
+                    )
+                }
+            }
+        }
     }
 }
 

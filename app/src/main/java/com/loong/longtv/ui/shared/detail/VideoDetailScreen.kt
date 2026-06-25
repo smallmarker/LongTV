@@ -42,6 +42,7 @@ import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.key
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -92,7 +93,12 @@ import com.loong.longtv.ui.shared.widgets.AppButton
 import com.loong.longtv.ui.shared.widgets.SectionHeader
 import com.loong.longtv.ui.shared.widgets.SmartAsyncImage
 import com.loong.longtv.ui.shared.widgets.TvSurface
-import com.loong.player.PlayerInteractionDefaults
+import com.loong.player.PlayerFeedbackPopup
+import com.loong.player.PhoneFullscreenGestureLayer
+import com.loong.player.PhoneGestureType
+import com.loong.player.PlayerLoadingOverlay
+import com.loong.player.SeekOverlayState
+import com.loong.player.rememberPlayerInteractionState
 import kotlinx.coroutines.launch
 import kotlin.math.abs
 import kotlin.math.roundToInt
@@ -238,92 +244,37 @@ internal fun DetailPreviewBlock(
     val audioManager = remember(context) { context.getSystemService(AUDIO_SERVICE) as AudioManager }
     val activity = context.findActivity()
     val haptic = LocalHapticFeedback.current
-    val controlState = rememberPlayerControlState()
     val title = detail.name.safeText("未命名视频")
-    val episodeName = selectedSource?.episodes?.getOrNull(selectedEpisodeIndex)?.name.orEmpty()
+    val selectedEpisode = selectedSource?.episodes?.getOrNull(selectedEpisodeIndex)
+    val episodeName = selectedEpisode?.name.orEmpty()
+    val previewSessionKey = listOf(
+        selectedSource?.flag.orEmpty(),
+        selectedEpisodeIndex.toString(),
+        selectedEpisode?.url.orEmpty(),
+        playableMedia?.url.orEmpty()
+    ).joinToString("#")
+    val controlState = key(previewSessionKey) { rememberPlayerControlState() }
+    val interactionState = rememberPlayerInteractionState(initialPositionMs = resumePositionMs)
     val topBarTitle = buildString {
         append(title)
         if (episodeName.isNotBlank()) append(" · ").append(episodeName)
     }
-    var currentPositionMs by remember(playableMedia?.url, resumePositionMs) { mutableLongStateOf(resumePositionMs) }
-    var durationMs by remember(playableMedia?.url) { mutableLongStateOf(0L) }
-    var isPlaying by remember(playableMedia?.url) { mutableStateOf(false) }
-    var isBuffering by remember(playableMedia?.url) { mutableStateOf(false) }
-    var playerReady by remember(playableMedia?.url) { mutableStateOf(false) }
-    var chromeVisible by remember(playableMedia?.url) { mutableStateOf(false) }
-    var chromeInteractionVersion by remember(playableMedia?.url) { mutableLongStateOf(0L) }
-    var gestureInProgress by remember(playableMedia?.url) { mutableStateOf(false) }
-    var progressBarWidthPx by remember(playableMedia?.url) { mutableStateOf(1f) }
-    var isScrubbing by remember(playableMedia?.url) { mutableStateOf(false) }
-    var scrubPositionMs by remember(playableMedia?.url, resumePositionMs) { mutableLongStateOf(resumePositionMs) }
-    var phoneFeedbackOverlay by remember(playableMedia?.url) { mutableStateOf<PhoneFeedbackOverlay?>(null) }
-    var phoneFeedbackVersion by remember(playableMedia?.url) { mutableIntStateOf(0) }
-    var brightnessLevel by remember(playableMedia?.url) {
+    var currentPositionMs by remember(previewSessionKey, resumePositionMs) { mutableLongStateOf(resumePositionMs) }
+    var durationMs by remember(previewSessionKey) { mutableLongStateOf(0L) }
+    var isPlaying by remember(previewSessionKey) { mutableStateOf(false) }
+    var isBuffering by remember(previewSessionKey) { mutableStateOf(false) }
+    var playerReady by remember(previewSessionKey) { mutableStateOf(false) }
+    var progressBarWidthPx by remember(previewSessionKey) { mutableStateOf(1f) }
+    var brightnessLevel by remember(previewSessionKey) {
         mutableStateOf(activity?.window?.attributes?.screenBrightness?.takeIf { it >= 0f } ?: 0.5f)
     }
-    var volumePercent by remember(playableMedia?.url) {
+    var volumePercent by remember(previewSessionKey) {
         val maxVolume = audioManager.getStreamMaxVolume(AudioManager.STREAM_MUSIC).coerceAtLeast(1)
         mutableStateOf(((audioManager.getStreamVolume(AudioManager.STREAM_MUSIC) * 100f) / maxVolume).roundToInt())
     }
 
-    LaunchedEffect(chromeVisible, chromeInteractionVersion, playableMedia?.url, gestureInProgress) {
-        if (chromeVisible && !gestureInProgress) {
-            kotlinx.coroutines.delay(PlayerInteractionDefaults.ControlsAutoHideMs)
-            chromeVisible = false
-        }
-    }
-
-    LaunchedEffect(phoneFeedbackOverlay, phoneFeedbackVersion, gestureInProgress) {
-        val current = phoneFeedbackOverlay ?: return@LaunchedEffect
-        val timeout = when (current) {
-            is PhoneFeedbackOverlay.Adjustment -> PlayerInteractionDefaults.FeedbackAutoHideMs
-            is PhoneFeedbackOverlay.Seek -> if (gestureInProgress) null else PlayerInteractionDefaults.SeekFeedbackAutoHideMs
-            is PhoneFeedbackOverlay.PlayPause -> PlayerInteractionDefaults.PlayPauseFeedbackAutoHideMs
-        }
-        if (timeout == null) return@LaunchedEffect
-        kotlinx.coroutines.delay(timeout)
-        if (phoneFeedbackOverlay == current) {
-            phoneFeedbackOverlay = null
-        }
-    }
-
-    LaunchedEffect(gestureInProgress, phoneFeedbackVersion) {
-        if (gestureInProgress || phoneFeedbackOverlay !is PhoneFeedbackOverlay.Seek) {
-            return@LaunchedEffect
-        }
-        kotlinx.coroutines.delay(PlayerInteractionDefaults.SeekFeedbackAutoHideMs)
-        if (phoneFeedbackOverlay is PhoneFeedbackOverlay.Seek) {
-            phoneFeedbackOverlay = null
-        }
-    }
-
-    fun registerChromeInteraction() {
-        chromeVisible = true
-        chromeInteractionVersion += 1
-    }
-
-    fun showChrome() {
-        chromeVisible = true
-        chromeInteractionVersion += 1
-    }
-
-    fun toggleChrome() {
-        if (chromeVisible) {
-            chromeVisible = false
-        } else {
-            showChrome()
-        }
-    }
-
-    fun showPhoneFeedback(
-        overlay: PhoneFeedbackOverlay,
-        keepControlsVisible: Boolean = true
-    ) {
-        phoneFeedbackOverlay = overlay
-        phoneFeedbackVersion += 1
-        if (keepControlsVisible) {
-            registerChromeInteraction()
-        }
+    LaunchedEffect(previewSessionKey) {
+        interactionState.clearForNewMedia(resumePositionMs)
     }
 
     fun updateBrightnessPercent(targetPercent: Int) {
@@ -333,14 +284,7 @@ internal fun DetailPreviewBlock(
         window.attributes = window.attributes.apply {
             screenBrightness = brightnessLevel
         }
-        showPhoneFeedback(
-            PhoneFeedbackOverlay.Adjustment(
-                AdjustmentOverlayState(
-                    type = PhoneGestureType.BRIGHTNESS,
-                    percent = clamped
-                )
-            )
-        )
+        interactionState.showAdjustment(PhoneGestureType.BRIGHTNESS, clamped)
     }
 
     fun updateVolumePercent(targetPercent: Int) {
@@ -349,40 +293,7 @@ internal fun DetailPreviewBlock(
         val target = (maxVolume * (clamped / 100f)).roundToInt().coerceIn(0, maxVolume)
         audioManager.setStreamVolume(AudioManager.STREAM_MUSIC, target, 0)
         volumePercent = clamped
-        showPhoneFeedback(
-            PhoneFeedbackOverlay.Adjustment(
-                AdjustmentOverlayState(
-                    type = PhoneGestureType.VOLUME,
-                    percent = clamped
-                )
-            )
-        )
-    }
-
-    fun previewSeekTo(positionMs: Long, deltaMs: Long, reachedEdgeMessage: String?) {
-        val duration = durationMs.takeIf { it > 0 } ?: return
-        isScrubbing = true
-        scrubPositionMs = positionMs.coerceIn(0L, duration)
-        showPhoneFeedback(
-            PhoneFeedbackOverlay.Seek(
-                SeekOverlayState(
-                    targetPositionMs = scrubPositionMs,
-                    durationMs = duration,
-                    deltaMs = deltaMs,
-                    reachedEdgeMessage = reachedEdgeMessage
-                )
-            )
-        )
-    }
-
-    fun commitPreviewSeek() {
-        if (!isScrubbing) return
-        currentPositionMs = scrubPositionMs
-        controlState.seekTo(scrubPositionMs)
-        onProgressChanged(scrubPositionMs, durationMs)
-        isScrubbing = false
-        phoneFeedbackVersion += 1
-        registerChromeInteraction()
+        interactionState.showAdjustment(PhoneGestureType.VOLUME, clamped)
     }
 
     fun positionFromBarOffset(offsetX: Float): Long {
@@ -394,24 +305,20 @@ internal fun DetailPreviewBlock(
     fun seekToPosition(positionMs: Long) {
         val duration = durationMs.takeIf { it > 0 } ?: Long.MAX_VALUE
         currentPositionMs = positionMs.coerceIn(0L, duration)
-        scrubPositionMs = currentPositionMs
+        interactionState.commitScrub(currentPositionMs)
         controlState.seekTo(currentPositionMs)
         onProgressChanged(currentPositionMs, durationMs)
-        registerChromeInteraction()
     }
 
     fun togglePlayPauseFromGesture() {
         val targetIsPlaying = !isPlaying
         controlState.togglePlayPause()
-        showPhoneFeedback(
-            overlay = PhoneFeedbackOverlay.PlayPause(targetIsPlaying),
-            keepControlsVisible = false
-        )
+        interactionState.showPlayPause(targetIsPlaying)
     }
 
     fun togglePlayPauseFromControl() {
         controlState.togglePlayPause()
-        registerChromeInteraction()
+        interactionState.registerInteraction()
     }
 
     Box(
@@ -432,9 +339,7 @@ internal fun DetailPreviewBlock(
                 onProgressChanged = { position, duration ->
                     currentPositionMs = position
                     durationMs = duration
-                    if (!isScrubbing) {
-                        scrubPositionMs = position
-                    }
+                    interactionState.syncPlaybackPosition(position)
                     onProgressChanged(position, duration)
                 },
                 onPlaybackStateChanged = { state ->
@@ -462,9 +367,9 @@ internal fun DetailPreviewBlock(
         }
 
         val playableReady = playableMedia?.url?.isNotBlank() == true && !playableMedia.needsParse()
-        val seekFeedbackVisible = gestureInProgress ||
-            isScrubbing ||
-            phoneFeedbackOverlay is PhoneFeedbackOverlay.Seek
+        val seekFeedbackVisible = interactionState.gestureInProgress ||
+            interactionState.isScrubbing ||
+            interactionState.feedbackOverlay != null
         val showPlayerLoading = playableReady &&
             !isPlaying &&
             !seekFeedbackVisible &&
@@ -478,31 +383,41 @@ internal fun DetailPreviewBlock(
         if (playableMedia?.url?.isNotBlank() == true && !playableMedia.needsParse()) {
             PhoneFullscreenGestureLayer(
                 modifier = Modifier.matchParentSize(),
+                resetKey = previewSessionKey,
                 durationMs = durationMs,
                 currentPositionMs = currentPositionMs,
                 brightnessPercent = (brightnessLevel * 100f).roundToInt().coerceIn(0, 100),
                 volumePercent = volumePercent,
                 reservedBottom = 0.dp,
-                onSingleTap = ::toggleChrome,
+                onSingleTap = interactionState::toggleControls,
                 onDoubleTap = ::togglePlayPauseFromGesture,
                 onGestureStart = {
-                    gestureInProgress = true
-                    registerChromeInteraction()
+                    interactionState.beginGesture()
                 },
                 onGestureEnd = { type ->
-                    gestureInProgress = false
-                    when (type) {
-                        PhoneGestureType.BRIGHTNESS,
-                        PhoneGestureType.VOLUME -> phoneFeedbackVersion += 1
-                        PhoneGestureType.SEEK -> {
-                            commitPreviewSeek()
-                            phoneFeedbackVersion += 1
-                        }
-                    }
+                    interactionState.endGesture(type)
                 },
                 onBrightnessChange = ::updateBrightnessPercent,
                 onVolumeChange = ::updateVolumePercent,
-                onSeekPreview = ::previewSeekTo,
+                onSeekPreview = { positionMs, deltaMs, reachedEdgeMessage ->
+                    interactionState.updateSeekPreview(
+                        SeekOverlayState(
+                            targetPositionMs = positionMs,
+                            durationMs = durationMs,
+                            deltaMs = deltaMs,
+                            reachedEdgeMessage = reachedEdgeMessage
+                        )
+                    )
+                },
+                onSeekCommit = { state ->
+                    currentPositionMs = state.targetPositionMs
+                    interactionState.commitScrub(
+                        positionMs = state.targetPositionMs,
+                        keepControlsVisible = false
+                    )
+                    controlState.seekTo(state.targetPositionMs)
+                    onProgressChanged(state.targetPositionMs, durationMs)
+                },
                 onBoundaryReached = {
                     haptic.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.LongPress)
                 }
@@ -523,28 +438,12 @@ internal fun DetailPreviewBlock(
                 )
         )
 
-        phoneFeedbackOverlay?.let { overlay ->
-            when (overlay) {
-                is PhoneFeedbackOverlay.Adjustment -> AdjustmentFeedbackOverlay(
-                    modifier = Modifier.align(Alignment.Center),
-                    type = overlay.state.type,
-                    percent = overlay.state.percent
-                )
-                is PhoneFeedbackOverlay.Seek -> SeekFeedbackOverlay(
-                    modifier = Modifier.align(Alignment.Center),
-                    state = overlay.state
-                )
-                is PhoneFeedbackOverlay.PlayPause -> PlayPauseFeedbackOverlay(
-                    modifier = Modifier.align(Alignment.Center),
-                    isPlaying = overlay.isPlaying
-                )
-            }
-        }
+        PlayerFeedbackPopup(overlay = interactionState.feedbackOverlay)
 
         val readyPlayableMedia = playableMedia
             ?.takeIf { it.url.isNotBlank() && !it.needsParse() }
 
-        if (chromeVisible) {
+        if (interactionState.controlsVisible) {
             PlayerTopInlineBar(
                 modifier = Modifier
                     .align(Alignment.TopStart)
@@ -573,7 +472,7 @@ internal fun DetailPreviewBlock(
                     text = when {
                         playableMedia == null -> "--:--"
                         playableMedia.needsParse() -> "--:--"
-                        else -> formatPlayerTime(if (isScrubbing) scrubPositionMs else currentPositionMs)
+                        else -> formatPlayerTime(if (interactionState.isScrubbing) interactionState.scrubPositionMs else currentPositionMs)
                     },
                     color = AppTextMuted,
                     fontSize = 12.sp,
@@ -593,24 +492,19 @@ internal fun DetailPreviewBlock(
                             detectDragGestures(
                                 onDragStart = { offset ->
                                     if (durationMs <= 0) return@detectDragGestures
-                                    isScrubbing = true
-                                    scrubPositionMs = positionFromBarOffset(offset.x)
-                                    registerChromeInteraction()
+                                    interactionState.updateScrubPosition(positionFromBarOffset(offset.x))
                                 },
                                 onDragCancel = {
-                                    isScrubbing = false
-                                    registerChromeInteraction()
+                                    interactionState.cancelScrub()
                                 },
                                 onDragEnd = {
-                                    if (isScrubbing) {
-                                        seekToPosition(scrubPositionMs)
+                                    if (interactionState.isScrubbing) {
+                                        seekToPosition(interactionState.scrubPositionMs)
                                     }
-                                    isScrubbing = false
                                 }
                             ) { change, _ ->
                                 if (durationMs <= 0) return@detectDragGestures
-                                scrubPositionMs = positionFromBarOffset(change.position.x)
-                                registerChromeInteraction()
+                                interactionState.updateScrubPosition(positionFromBarOffset(change.position.x))
                             }
                         }
                         .onSizeChanged { progressBarWidthPx = it.width.toFloat().coerceAtLeast(1f) },
@@ -625,7 +519,7 @@ internal fun DetailPreviewBlock(
                     )
                     Box(
                         modifier = Modifier
-                            .fillMaxWidth(playbackProgress(if (isScrubbing) scrubPositionMs else currentPositionMs, durationMs))
+                            .fillMaxWidth(playbackProgress(if (interactionState.isScrubbing) interactionState.scrubPositionMs else currentPositionMs, durationMs))
                             .height(5.dp)
                             .clip(RoundedCornerShape(999.dp))
                             .background(
@@ -635,7 +529,7 @@ internal fun DetailPreviewBlock(
                             )
                     )
                     Box(
-                        modifier = Modifier.fillMaxWidth(playbackProgress(if (isScrubbing) scrubPositionMs else currentPositionMs, durationMs)),
+                        modifier = Modifier.fillMaxWidth(playbackProgress(if (interactionState.isScrubbing) interactionState.scrubPositionMs else currentPositionMs, durationMs)),
                         contentAlignment = Alignment.CenterEnd
                     ) {
                         Box(
@@ -664,7 +558,7 @@ internal fun DetailPreviewBlock(
                             onOpenFullscreen(
                                 readyPlayableMedia,
                                 episodeName,
-                                if (isScrubbing) scrubPositionMs else currentPositionMs
+                                if (interactionState.isScrubbing) interactionState.scrubPositionMs else currentPositionMs
                             )
                         }
                     )

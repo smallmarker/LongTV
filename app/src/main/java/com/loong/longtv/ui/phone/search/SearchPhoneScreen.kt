@@ -1,6 +1,7 @@
 package com.loong.longtv.ui.phone.search
 
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -21,9 +22,14 @@ fun SearchPhoneScreen(
 ) {
     val historyList by viewModel.history.collectAsState()
     val groups by viewModel.searchState.collectAsState()
+    val suggestions by viewModel.tvSuggestions.collectAsState()
+    val suggestionsLoading by viewModel.tvSuggestionsLoading.collectAsState()
     var keyword by rememberSaveable { mutableStateOf("") }
     val hotKeywords = remember(groups) {
         groups.firstOrNull { it.title == "热门搜索" }?.tags.orEmpty()
+    }
+    LaunchedEffect(keyword) {
+        viewModel.loadTvSuggestions(keyword)
     }
 
     val searchAction: (String) -> Unit = { text ->
@@ -39,6 +45,8 @@ fun SearchPhoneScreen(
             onKeywordChange = { keyword = it },
             historyList = historyList.map { it.keyword },
             hotKeywords = hotKeywords,
+            suggestionList = suggestions,
+            suggestionLoading = suggestionsLoading,
             onBack = { navController.popBackStack() },
             onSearch = searchAction,
             onClearHistory = viewModel::clear,

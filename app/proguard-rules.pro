@@ -20,27 +20,30 @@
 # hide the original source file name.
 #-renamesourcefileattribute SourceFile
 
-# Preserve stack traces in release builds.
+# Preserve useful stack traces in release builds.
 -keepattributes SourceFile,LineNumberTable,*Annotation*,Signature,InnerClasses,EnclosingMethod
 -renamesourcefileattribute SourceFile
 
-# Gson uses field names and generic signatures reflectively.
+# Gson uses field names, generic signatures and no-arg/default constructors reflectively.
 -keep class com.google.gson.reflect.TypeToken { *; }
 -keep class * extends com.google.gson.reflect.TypeToken
 -keepclassmembers,allowobfuscation class * {
     @com.google.gson.annotations.SerializedName <fields>;
 }
 
-# Keep JSON model fields stable for reflective parsing.
+# Keep JSON/config models stable for reflective parsing.
+# SourceRepository parses Spider JSON into these Kotlin data classes with Gson.
+-keep class com.loong.longtv.engine.source.model.** { *; }
 -keep class com.loong.longtv.data.bean.** { *; }
--keep class com.loong.longtv.data.repository.ApiResult { *; }
--keep class com.loong.longtv.spider.data.bean.** { *; }
 
-# Keep CatVod/Spider integration classes that are instantiated across module boundaries.
--keep class com.loong.longtv.core.spider.** { *; }
+# Keep CatVod/Spider integration classes. SpiderLoader instantiates bundled spiders by
+# class name from api.json, for example csp_AppRJ -> com.github.catvod.spider.AppRJ.
+-keep class com.loong.longtv.engine.** { *; }
 -keep class com.github.catvod.crawler.** { *; }
-# Keep all app-bundled Spider implementations (loaded reflectively by class name).
 -keep class com.github.catvod.spider.** { *; }
+-keep class com.github.catvod.net.** { *; }
+-keep class com.github.catvod.utils.** { *; }
+-keep class com.dnsoverhttps.** { *; }
 
 # Hilt / Dagger generated graphs rely on annotation metadata.
 -keep class dagger.hilt.** { *; }
@@ -65,7 +68,7 @@
 }
 
 # Media3 / ExoPlayer and AndroidX generally ship consumer rules, but keep custom player-facing code.
--keep class com.loong.longtv.ui.shared.detail.PlayerUi { *; }
+-keep class com.loong.player.** { *; }
 -dontwarn androidx.media3.**
 -dontwarn org.checkerframework.**
 
@@ -74,6 +77,7 @@
 -dontwarn okio.**
 -dontwarn retrofit2.**
 -dontwarn org.jsoup.**
+-dontwarn javax.annotation.**
 
 # Keep Kotlin metadata signatures used by reflection-heavy libraries.
 -keep class kotlin.Metadata { *; }

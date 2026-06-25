@@ -2,10 +2,10 @@ package com.loong.longtv.ui.shared.detail
 
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
+import com.loong.player.PlayerInputMode
+import com.loong.player.UnifiedVideoPlayer
 import com.loong.longtv.ui.common.DeviceClass
 import com.loong.longtv.ui.common.currentDeviceClass
-import com.loong.longtv.ui.phone.detail.PhoneVideoPlayerView
-import com.loong.longtv.ui.tv.detail.TvVideoPlayerView
 
 @Composable
 fun VideoPlayerView(
@@ -29,48 +29,30 @@ fun VideoPlayerView(
     onPlaybackError: ((String) -> Unit)? = null,
     onSurfaceTap: (() -> Unit)? = null,
 ) {
-    when (currentDeviceClass()) {
-        DeviceClass.PHONE -> PhoneVideoPlayerView(
-            modifier = modifier,
-            videoUrl = videoUrl,
-            requestHeaders = requestHeaders,
-            initialPositionMs = initialPositionMs,
-            repeat = repeat,
-            autoPlay = autoPlay,
-            showController = showController,
-            enableNativeController = enableNativeController,
-            sharedSessionEnabled = sharedSessionEnabled,
-            sharedSessionReleaseDelayMs = sharedSessionReleaseDelayMs,
-            resizeMode = resizeMode,
-            controlState = controlState,
-            onProgressChanged = onProgressChanged,
-            onControllerVisibilityChanged = onControllerVisibilityChanged,
-            onPlaybackStateChanged = onPlaybackStateChanged,
-            onPlayingChanged = onPlayingChanged,
-            onPlaybackEnded = onPlaybackEnded,
-            onPlaybackError = onPlaybackError,
-            onSurfaceTap = onSurfaceTap
-        )
-        DeviceClass.TV -> TvVideoPlayerView(
-            modifier = modifier,
-            videoUrl = videoUrl,
-            requestHeaders = requestHeaders,
-            initialPositionMs = initialPositionMs,
-            repeat = repeat,
-            autoPlay = autoPlay,
-            showController = showController,
-            enableNativeController = enableNativeController,
-            sharedSessionEnabled = sharedSessionEnabled,
-            sharedSessionReleaseDelayMs = sharedSessionReleaseDelayMs,
-            resizeMode = resizeMode,
-            controlState = controlState,
-            onProgressChanged = onProgressChanged,
-            onControllerVisibilityChanged = onControllerVisibilityChanged,
-            onPlaybackStateChanged = onPlaybackStateChanged,
-            onPlayingChanged = onPlayingChanged,
-            onPlaybackEnded = onPlaybackEnded,
-            onPlaybackError = onPlaybackError,
-            onSurfaceTap = onSurfaceTap
-        )
+    val inputMode = when (currentDeviceClass()) {
+        DeviceClass.PHONE -> PlayerInputMode.Touch
+        DeviceClass.TV -> PlayerInputMode.Remote
     }
+    UnifiedVideoPlayer(
+        modifier = modifier,
+        videoUrl = videoUrl,
+        requestHeaders = requestHeaders,
+        initialPositionMs = initialPositionMs,
+        repeat = repeat,
+        autoPlay = autoPlay,
+        showController = showController,
+        enableNativeController = enableNativeController,
+        sharedSessionEnabled = sharedSessionEnabled,
+        sharedSessionReleaseDelayMs = sharedSessionReleaseDelayMs,
+        inputMode = inputMode,
+        resizeMode = resizeMode,
+        controlState = controlState,
+        onProgressChanged = onProgressChanged,
+        onControllerVisibilityChanged = onControllerVisibilityChanged,
+        onPlaybackStateChanged = onPlaybackStateChanged,
+        onPlayingChanged = onPlayingChanged,
+        onPlaybackEnded = onPlaybackEnded,
+        onPlaybackError = onPlaybackError,
+        onSurfaceTap = onSurfaceTap
+    )
 }

@@ -9,6 +9,8 @@ import okhttp3.Request
 import org.json.JSONObject
 import org.jsoup.Jsoup
 import org.jsoup.nodes.Document
+import org.jsoup.nodes.Element
+import java.net.URLDecoder
 import java.net.URLEncoder
 import java.util.concurrent.TimeUnit
 
@@ -51,12 +53,15 @@ class Xmfyy : Spider() {
             if (id in MAIN_CLASS_IDS && name.isNotBlank() && name !in IGNORE_NAV) classes[id] = name
         }
         if (classes.isEmpty()) MAIN_CLASSES.forEach { (id, name) -> classes[id] = name }
+        val filters = classes.keys.associateWith { tid ->
+            parseFilters(getDoc("/index.php/vod/show/id/$tid.html"), tid)
+        }.filterValues { it.isNotEmpty() }
         return gson.toJson(
             mapOf(
                 "class" to classes.map { (id, name) ->
                     mapOf("type_id" to id, "type_name" to name)
                 },
-                "filters" to classes.keys.associateWith { buildFilters(it) }
+                "filters" to filters
             )
         )
     }
@@ -237,16 +242,44 @@ class Xmfyy : Spider() {
         return "/index.php/vod/show/${segments.joinToString("/")}.html"
     }
 
-    private fun buildFilters(tid: String): List<Map<String, Any>> {
-        return buildList {
-            SUB_CLASSES[tid]?.takeIf { it.isNotEmpty() }?.let { values ->
-                add(filter("type", "分类", listOf("" to "全部") + values))
+    private fun parseFilters(doc: Document?, tid: String): List<Map<String, Any>> {
+        if (doc == null) return emptyList()
+        val filters = mutableListOf<Map<String, Any>>()
+        filters.addAll(parseSortFilter(doc))
+        doc.select(".hl-filter-wrap").forEach { wrap ->
+            val name = clean(wrap.selectFirst(".hl-filter-text span")?.text().orEmpty())
+            val key = when (name) {
+                "分类" -> "type"
+                "年份" -> "year"
+                "语言" -> "lang"
+                "字母" -> "letter"
+                else -> return@forEach
             }
-            add(filter("by", "排序", SORTS))
-            add(filter("year", "年份", listOf("" to "全部") + YEARS.map { it to it }))
-            add(filter("lang", "语言", listOf("" to "全部") + LANGS.map { it to it }))
-            add(filter("letter", "字母", listOf("" to "全部") + LETTERS.map { it to it }))
+            val values = wrap.select("a").mapNotNull { a -> parseFilterValue(a, key, tid) }
+                .distinctBy { it.first }
+            if (values.size > 1) filters.add(filter(key, name, values))
         }
+        return filters.distinctBy { it["key"] }
+    }
+
+    private fun parseSortFilter(doc: Document): List<Map<String, Any>> {
+        val values = doc.select(".hl-site-tabs a[href*=/index.php/vod/show/]").mapNotNull { a ->
+            val label = clean(a.text()).removePrefix("按").ifBlank { return@mapNotNull null }
+            val by = Regex("/by/([^/]+)").find(a.attr("href"))?.groupValues?.getOrNull(1).orEmpty()
+            decode(by) to label
+        }.distinctBy { it.first }
+        return if (values.isNotEmpty()) listOf(filter("by", "排序", listOf("" to "全部") + values)) else emptyList()
+    }
+
+    private fun parseFilterValue(a: Element, key: String, tid: String): Pair<String, String>? {
+        val label = clean(a.text()).ifBlank { return null }
+        if (label == "全部" || a.attr("href").startsWith("javascript")) return "" to label
+        val href = a.attr("href")
+        val value = when (key) {
+            "type" -> extractTypeId(href).takeIf { it != tid }.orEmpty()
+            else -> Regex("/$key/([^/.]+)").find(href)?.groupValues?.getOrNull(1)?.let(::decode).orEmpty()
+        }
+        return value.takeIf { it.isNotBlank() }?.let { it to label }
     }
 
     private fun filter(key: String, name: String, values: List<Pair<String, String>>): Map<String, Any> {
@@ -324,6 +357,10 @@ class Xmfyy : Spider() {
 
     private fun urlEncode(value: String): String = URLEncoder.encode(value, "UTF-8")
 
+    private fun decode(value: String): String {
+        return runCatching { URLDecoder.decode(value, "UTF-8") }.getOrDefault(value)
+    }
+
     private data class PlayLine(val name: String, val episodes: List<Episode>)
 
     private data class Episode(val name: String, val url: String)
@@ -337,14 +374,5 @@ class Xmfyy : Spider() {
         private val IGNORE_NAV = setOf("首页", "留言", "最新", "排行", "全部", "RSS订阅")
         private val MAIN_CLASSES = listOf("2" to "连续剧", "1" to "电影", "4" to "动漫", "3" to "综艺")
         private val MAIN_CLASS_IDS = MAIN_CLASSES.map { it.first }.toSet()
-        private val SUB_CLASSES = mapOf(
-            "2" to listOf("13" to "国产剧", "14" to "港台剧", "15" to "日韩剧", "16" to "欧美剧", "38" to "纪录片", "37" to "其他剧"),
-            "1" to listOf("6" to "动作片", "7" to "喜剧片", "8" to "爱情片", "9" to "科幻片", "10" to "恐怖片", "11" to "剧情片", "12" to "战争片", "21" to "悬疑片"),
-            "4" to listOf("28" to "动漫", "39" to "番剧", "19" to "动画片")
-        )
-        private val SORTS = listOf("" to "全部", "time" to "最新", "hits" to "最热", "score" to "评分")
-        private val YEARS = (2026 downTo 2014).map { it.toString() }
-        private val LANGS = listOf("国语", "英语", "粤语", "闽南语", "韩语", "日语", "法语", "德语", "其它")
-        private val LETTERS = ('A'..'Z').map { it.toString() } + "0-9"
     }
 }

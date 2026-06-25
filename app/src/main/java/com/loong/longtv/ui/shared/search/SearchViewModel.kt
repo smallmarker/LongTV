@@ -3,30 +3,27 @@ package com.loong.longtv.ui.shared.search
 import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import com.google.gson.JsonParser
+import com.loong.longtv.data.SourcePreference
 import com.loong.longtv.data.room.dao.SearchHistoryDao
 import com.loong.longtv.data.room.entity.SearchHistoryEntity
+import com.loong.longtv.di.DefaultSources
 import com.loong.longtv.engine.TvBoxEngine
+import com.loong.longtv.engine.source.model.SiteConfig
 import com.loong.longtv.engine.source.model.VodInfo
 import dagger.hilt.android.lifecycle.HiltViewModel
-import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
-import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.supervisorScope
-import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
-import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
-import okhttp3.OkHttpClient
-import okhttp3.Request
 import javax.inject.Inject
 
 data class TagGroup(
@@ -38,8 +35,8 @@ data class TagGroup(
 class SearchViewModel @Inject constructor(
     private val dao: SearchHistoryDao,
     private val engine: TvBoxEngine,
+    private val sourcePreference: SourcePreference,
 ) : ViewModel() {
-    private val client = OkHttpClient()
     private val _hotKeywords = MutableStateFlow<List<String>>(emptyList())
     private val _tvSuggestions = MutableStateFlow<List<String>>(emptyList())
     private val _tvSuggestionKeyword = MutableStateFlow("")
@@ -70,6 +67,11 @@ class SearchViewModel @Inject constructor(
     init {
         viewModelScope.launch {
             history.collectLatest(::updateSearchState)
+        }
+        viewModelScope.launch {
+            sourcePreference.popularSiteKey.drop(1).collect {
+                refreshHotKeywords()
+            }
         }
         refreshHotKeywords()
     }
@@ -102,8 +104,11 @@ class SearchViewModel @Inject constructor(
             delay(180)
             if (_tvSuggestionKeyword.value != trimmed) return@launch
             _tvSuggestionsLoading.value = true
-            _tvSuggestions.value = fetchTvSuggestions(trimmed)
-            if (_tvSuggestionKeyword.value == trimmed) _tvSuggestionsLoading.value = false
+            val suggestions = fetchCurrentSiteSuggestions(trimmed)
+            if (_tvSuggestionKeyword.value == trimmed) {
+                _tvSuggestions.value = suggestions
+                _tvSuggestionsLoading.value = false
+            }
         }
     }
 
@@ -119,6 +124,7 @@ class SearchViewModel @Inject constructor(
             _searchLoading.value = true
             _searchError.value = null
             _searchResult.value = emptyMap()
+            ensureConfigStarted()
 
             val searchableSites = engine.currentConfig?.sites
                 ?.filter { it.isSpiderSite() && it.isSearchable() }
@@ -187,7 +193,8 @@ class SearchViewModel @Inject constructor(
 
     private fun refreshHotKeywords() {
         viewModelScope.launch {
-            val hot = (loadTencentHotKeywords() + loadSpiderHotKeywords())
+            ensureConfigStarted()
+            val hot = loadCurrentSiteHotKeywords()
                 .mapNotNull { it.normalizeKeyword().takeIf(String::isNotBlank) }
                 .distinct()
                 .take(MAX_HOT_KEYWORDS)
@@ -196,90 +203,68 @@ class SearchViewModel @Inject constructor(
         }
     }
 
-    private suspend fun loadTencentHotKeywords(): List<String> = withContext(Dispatchers.IO) {
-        runCatching {
-            val url = requireNotNull("https://node.video.qq.com/x/api/hot_search".toHttpUrlOrNull())
-                .newBuilder()
-                .addQueryParameter("channdlId", "0")
-                .addQueryParameter("_", System.currentTimeMillis().toString())
-                .build()
-            val request = Request.Builder().url(url).get().header("User-Agent", "Mozilla/5.0").build()
-            client.newCall(request).execute().use { response ->
-                if (!response.isSuccessful) return@use emptyList()
-                val body = response.body?.string().orEmpty()
-                JsonParser.parseString(body)
-                    .asJsonObject.getAsJsonObject("data")
-                    .getAsJsonObject("mapResult").getAsJsonObject("0")
-                    .getAsJsonArray("listInfo")
-                    .mapNotNull { it.asJsonObject.get("title")?.asString?.normalizeKeyword() }
-                    .filter { it.isNotBlank() }.distinct().take(12)
+    private suspend fun loadCurrentSiteHotKeywords(): List<String> {
+        val site = currentSearchSite() ?: return emptyList()
+        return withTimeoutOrNull(SPIDER_HOT_TIMEOUT_MS) {
+            val homeVideos = engine.sourceRepository.getHomeVideos(site)
+                .getOrNull()
+                ?.list
+                .orEmpty()
+
+            val categoryVideos = if (homeVideos.isEmpty()) {
+                val firstCategory = engine.sourceRepository.getHomeContent(site)
+                    .getOrNull()
+                    ?.categories
+                    ?.firstOrNull()
+                firstCategory?.let {
+                    engine.sourceRepository.getCategoryContent(site, it.id)
+                        .getOrNull()
+                        ?.list
+                }.orEmpty()
+            } else {
+                emptyList()
             }
-        }.getOrElse { emptyList() }
+
+            (homeVideos + categoryVideos)
+                .mapNotNull { it.name.normalizeKeyword().takeIf(String::isNotBlank) }
+                .take(MAX_HOT_KEYWORDS)
+        }.orEmpty()
     }
 
-    private suspend fun loadSpiderHotKeywords(): List<String> = supervisorScope {
+    private suspend fun fetchCurrentSiteSuggestions(keyword: String): List<String> {
+        ensureConfigStarted()
+        val site = currentSearchSite() ?: return emptyList()
+        return withTimeoutOrNull(SUGGESTION_TIMEOUT_MS) {
+            engine.sourceRepository.search(site, keyword, timeoutMs = SUGGESTION_TIMEOUT_MS)
+                .getOrNull()
+                ?.list
+                .orEmpty()
+                .mapNotNull { it.name.normalizeKeyword().takeIf(String::isNotBlank) }
+                .distinct()
+                .take(MAX_SUGGESTIONS)
+        }.orEmpty()
+    }
+
+    private suspend fun ensureConfigStarted() {
+        if (engine.currentConfig != null) return
+        val source = sourcePreference.load() ?: DefaultSources.default
+        engine.start(source)
+    }
+
+    private fun currentSearchSite(): SiteConfig? {
         val sites = engine.currentConfig?.sites
             ?.filter { it.isSpiderSite() && it.isSearchable() }
             .orEmpty()
-            .take(MAX_HOT_SPIDER_SITES)
-
-        sites.map { site ->
-            async {
-                withTimeoutOrNull(SPIDER_HOT_TIMEOUT_MS) {
-                    val homeVideos = engine.sourceRepository.getHomeVideos(site)
-                        .getOrNull()
-                        ?.list
-                        .orEmpty()
-
-                    val categoryVideos = if (homeVideos.isEmpty()) {
-                        engine.sourceRepository.getCategoryContent(site, "0")
-                            .getOrNull()
-                            ?.list
-                            .orEmpty()
-                    } else {
-                        emptyList()
-                    }
-
-                    (homeVideos + categoryVideos)
-                        .mapNotNull { it.name.normalizeKeyword().takeIf(String::isNotBlank) }
-                        .take(MAX_HOT_KEYWORDS)
-                }.orEmpty()
-            }
-        }.awaitAll().flatten().distinct().take(MAX_HOT_KEYWORDS)
-    }
-
-    private suspend fun fetchTvSuggestions(keyword: String): List<String> = withContext(Dispatchers.IO) {
-        runCatching {
-            val url = requireNotNull(
-                "https://tv.aiseet.atianqi.com/i-tvbin/qtv_video/search/get_search_smart_box".toHttpUrlOrNull()
-            ).newBuilder()
-                .addQueryParameter("format", "json")
-                .addQueryParameter("page_num", "0")
-                .addQueryParameter("page_size", "50")
-                .addQueryParameter("key", keyword)
-                .build()
-            val request = Request.Builder().url(url).get().header("User-Agent", "Mozilla/5.0").build()
-            client.newCall(request).execute().use { response ->
-                if (!response.isSuccessful) return@use emptyList()
-                val body = response.body?.string().orEmpty()
-                JsonParser.parseString(body).asJsonObject
-                    .getAsJsonObject("data").getAsJsonObject("search_data")
-                    .getAsJsonArray("vecGroupData").firstOrNull()?.asJsonObject
-                    ?.getAsJsonArray("group_data")
-                    ?.mapNotNull {
-                        it.asJsonObject.getAsJsonObject("dtReportInfo")
-                            ?.getAsJsonObject("reportData")?.get("keyword_txt")?.asString?.trim()
-                            ?.takeIf(String::isNotBlank)
-                    }?.distinct()?.take(12).orEmpty()
-            }
-        }.getOrElse { emptyList() }
+        val preferredKey = sourcePreference.loadPopularSiteKey()
+        return sites.firstOrNull { it.key == preferredKey } ?: sites.firstOrNull()
     }
 
     companion object {
         private const val TAG = "SearchViewModel"
         private const val MAX_HOT_KEYWORDS = 16
-        private const val MAX_HOT_SPIDER_SITES = 3
         private const val SPIDER_HOT_TIMEOUT_MS = 5_000L
+        private const val SUGGESTION_TIMEOUT_MS = 4_000L
+        private const val MAX_SUGGESTIONS = 12
     }
 }
 

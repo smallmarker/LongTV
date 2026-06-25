@@ -2,6 +2,7 @@ package com.loong.player
 
 import android.content.Context
 import android.util.Log
+import android.view.LayoutInflater
 import android.view.MotionEvent
 import android.view.View
 import android.view.ViewGroup
@@ -182,7 +183,7 @@ fun ComposeVideoPlayer(
     AndroidView(
         modifier = modifier,
         factory = {
-            PlayerView(context).apply {
+            createPlayerView(context).apply {
                 if (sharedSessionEnabled) {
                     SharedPlayerSession.attachView(player, this)
                 } else {
@@ -222,6 +223,11 @@ fun ComposeVideoPlayer(
             )
         }
     )
+}
+
+private fun createPlayerView(context: Context): PlayerView {
+    return LayoutInflater.from(context)
+        .inflate(R.layout.loong_player_view, null, false) as PlayerView
 }
 
 private fun PlayerResizeMode.toMedia3ResizeMode(): Int = when (this) {
