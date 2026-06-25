@@ -16,21 +16,15 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Brush
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.tv.material3.Text
-import com.loong.longtv.ui.theme.AppBackground
-import com.loong.longtv.ui.theme.AppBackgroundElevated
 import com.loong.longtv.ui.theme.AppCardOverlay
 import com.loong.longtv.ui.theme.AppTextPrimary
 import com.loong.longtv.ui.theme.AppTextSecondary
-import com.loong.longtv.ui.theme.BrandAccent
 import com.loong.longtv.ui.theme.BrandPrimary
-import com.loong.longtv.ui.theme.BrandSecondary
 
 @Composable
 fun PhoneAppPageScaffold(
@@ -76,43 +70,7 @@ private fun AppPageScaffoldBase(
     Box(
         modifier = modifier
             .fillMaxSize()
-            .background(
-                brush = Brush.verticalGradient(
-                    colors = listOf(
-                        AppBackground,
-                        AppBackgroundElevated,
-                        AppBackground
-                    )
-                )
-            )
     ) {
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(280.dp)
-                .background(
-                    Brush.radialGradient(
-                        colors = listOf(
-                            BrandSecondary.copy(alpha = 0.24f),
-                            Color.Transparent
-                        )
-                    )
-                )
-        )
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(360.dp)
-                .background(
-                    Brush.horizontalGradient(
-                        colors = listOf(
-                            BrandAccent.copy(alpha = 0.16f),
-                            Color.Transparent,
-                            BrandPrimary.copy(alpha = 0.12f)
-                        )
-                    )
-                )
-        )
         Column(
             modifier = Modifier
                 .fillMaxSize()

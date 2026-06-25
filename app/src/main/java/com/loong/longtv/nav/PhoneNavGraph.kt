@@ -1,8 +1,16 @@
 package com.loong.longtv.nav
 
 import android.net.Uri
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.WindowInsetsSides
+import androidx.compose.foundation.layout.only
+import androidx.compose.foundation.layout.safeDrawing
+import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.ui.Modifier
 import androidx.navigation.NavType
+import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
@@ -21,8 +29,23 @@ import com.loong.longtv.ui.phone.settings.SettingsPhoneScreen
 @Composable
 fun PhoneNavGraph() {
     val navController = rememberNavController()
+    val backStackEntry by navController.currentBackStackEntryAsState()
+    val route = backStackEntry?.destination?.route
+    val navModifier = if (route == Screen.FullscreenPlayer.route) {
+        Modifier
+    } else {
+        Modifier.windowInsetsPadding(
+            WindowInsets.safeDrawing.only(
+                WindowInsetsSides.Top + WindowInsetsSides.Horizontal
+            )
+        )
+    }
 
-    NavHost(navController = navController, startDestination = Screen.Home.route) {
+    NavHost(
+        navController = navController,
+        startDestination = Screen.Home.route,
+        modifier = navModifier
+    ) {
         composable(Screen.Home.route) {
             HomePhoneScreen(navController = navController)
         }

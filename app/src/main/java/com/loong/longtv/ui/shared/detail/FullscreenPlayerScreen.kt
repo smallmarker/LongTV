@@ -346,7 +346,7 @@ internal fun FullscreenPlayerContent(
             }
             activity.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE
             onDispose {
-                WindowCompat.setDecorFitsSystemWindows(window, true)
+                WindowCompat.setDecorFitsSystemWindows(window, false)
                 WindowInsetsControllerCompat(window, window.decorView)
                     .show(WindowInsetsCompat.Type.systemBars())
                 activity.requestedOrientation = previousOrientation

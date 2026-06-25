@@ -52,8 +52,6 @@ import com.loong.longtv.ui.shared.detail.FullscreenPlayerContent
 import com.loong.player.PlayerLoadingOverlay
 import com.loong.longtv.ui.shared.detail.SourceRow
 import com.loong.longtv.ui.shared.detail.VideoDetailRouteContent
-import com.loong.longtv.ui.theme.AppBackground
-import com.loong.longtv.ui.theme.AppBackgroundElevated
 import com.loong.longtv.ui.theme.AppTextMuted
 import com.loong.longtv.ui.theme.AppTextPrimary
 import com.loong.longtv.ui.theme.BrandPrimary
@@ -144,15 +142,6 @@ internal fun VideoDetailPhoneContent(
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .background(
-                    Brush.verticalGradient(
-                        colors = listOf(
-                            AppBackground,
-                            AppBackgroundElevated,
-                            AppBackground
-                        )
-                    )
-                )
         ) {
             Box(
                 modifier = Modifier
@@ -311,7 +300,7 @@ private fun EmbeddedPhoneFullscreenOrientation(
             }
             activity.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE
             onDispose {
-                WindowCompat.setDecorFitsSystemWindows(window, true)
+                WindowCompat.setDecorFitsSystemWindows(window, false)
                 WindowInsetsControllerCompat(window, window.decorView).show(WindowInsetsCompat.Type.systemBars())
                 activity.requestedOrientation = previousOrientation
             }

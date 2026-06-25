@@ -47,8 +47,6 @@ import com.loong.longtv.ui.shared.detail.DetailPreviewBlock
 import com.loong.longtv.ui.shared.detail.EpisodeGrid
 import com.loong.longtv.ui.shared.detail.SourceRow
 import com.loong.longtv.ui.shared.detail.VideoDetailRouteContent
-import com.loong.longtv.ui.theme.AppBackground
-import com.loong.longtv.ui.theme.AppBackgroundElevated
 import com.loong.longtv.ui.theme.AppTextMuted
 import com.loong.longtv.ui.theme.AppTextPrimary
 import com.loong.longtv.ui.theme.AppTextSecondary
@@ -144,15 +142,6 @@ internal fun VideoDetailTvContent(
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .background(
-                brush = Brush.verticalGradient(
-                    colors = listOf(
-                        AppBackground,
-                        AppBackgroundElevated,
-                        AppBackground
-                    )
-                )
-            )
     ) {
         BoxWithConstraints(
             modifier = Modifier

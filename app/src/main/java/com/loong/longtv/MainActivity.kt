@@ -7,15 +7,17 @@ import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.tooling.preview.Preview
+import androidx.core.view.WindowCompat
+import androidx.core.view.WindowInsetsControllerCompat
 import com.loong.longtv.nav.AppNavGraph
 import com.loong.longtv.ui.adaptive.AutoSizeLayout
 import com.loong.longtv.ui.common.DeviceClass
 import com.loong.longtv.ui.common.currentDeviceClass
+import com.loong.longtv.ui.theme.LongTVAppBackground
 import com.loong.longtv.ui.theme.LongTVTheme
 import dagger.hilt.android.AndroidEntryPoint
 
@@ -36,6 +38,7 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         applyDeviceOrientation()
+        applyImmersiveSystemBars()
         val permissions = buildRequiredPermissions()
         if (permissions.isEmpty()) {
             setMainContent()
@@ -48,7 +51,7 @@ class MainActivity : ComponentActivity() {
         setContent {
             LongTVTheme {
                 AutoSizeLayout {
-                    Box(modifier = Modifier.fillMaxSize()) {
+                    LongTVAppBackground(modifier = Modifier.fillMaxSize()) {
                         AppNavGraph()
                     }
                 }
@@ -70,6 +73,21 @@ class MainActivity : ComponentActivity() {
                 Manifest.permission.READ_EXTERNAL_STORAGE,
                 Manifest.permission.WRITE_EXTERNAL_STORAGE
             )
+        }
+    }
+
+    @Suppress("DEPRECATION")
+    private fun applyImmersiveSystemBars() {
+        WindowCompat.setDecorFitsSystemWindows(window, false)
+        window.statusBarColor = android.graphics.Color.TRANSPARENT
+        window.navigationBarColor = android.graphics.Color.TRANSPARENT
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            window.isStatusBarContrastEnforced = false
+            window.isNavigationBarContrastEnforced = false
+        }
+        WindowInsetsControllerCompat(window, window.decorView).apply {
+            isAppearanceLightStatusBars = false
+            isAppearanceLightNavigationBars = false
         }
     }
 }
