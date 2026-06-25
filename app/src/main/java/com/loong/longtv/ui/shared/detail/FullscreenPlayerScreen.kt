@@ -120,7 +120,9 @@ internal fun FullscreenPlayerContent(
     val controlState = rememberPlayerControlState()
     val speedOptions = remember { listOf(1.0f, 1.25f, 1.5f, 2.0f) }
     val qualityOptions = remember { listOf("跟随片源", "高清 1080P", "超清 4K") }
-    var currentPositionMs by remember(initialPositionMs) { mutableLongStateOf(initialPositionMs) }
+    var currentPositionMs by remember(videoUrl, episodeIndex, initialPositionMs) {
+        mutableLongStateOf(initialPositionMs)
+    }
     var durationMs by remember(title, videoUrl) { mutableLongStateOf(0L) }
     var isPlaying by remember(title, videoUrl) { mutableStateOf(false) }
     var isBuffering by remember(title, videoUrl) { mutableStateOf(false) }

@@ -121,7 +121,16 @@ class VideoDetailViewModel @Inject constructor(
                     .indexOfFirst { it.url == history?.episodeUrl }
                     .takeIf { it >= 0 }
                 ?: 0
-            val resumePosition = if (history?.sourceName == source.flag) history?.positionMs ?: 0 else 0
+            val episode = source.episodes.getOrNull(episodeIndex)
+            val resumePosition = if (
+                episode != null &&
+                history?.sourceName == source.flag &&
+                history.episodeUrl == episode.url
+            ) {
+                history.positionMs
+            } else {
+                0
+            }
             _uiState.update {
                 it.copy(
                     selectedSourceIndex = index,
@@ -160,12 +169,14 @@ class VideoDetailViewModel @Inject constructor(
         val requestVersion = ++playRequestVersion
 
         viewModelScope.launch {
+            val requestedResumePosition = resolveResumePosition(playLine, episode)
             _uiState.update {
                 it.copy(
                     playerLoading = true,
                     selectedSourceIndex = requestedSourceIndex,
                     selectedEpisodeIndex = episodeIndex,
                     playableMedia = null,
+                    resumePositionMs = requestedResumePosition,
                     error = null
                 )
             }
@@ -207,6 +218,7 @@ class VideoDetailViewModel @Inject constructor(
 
     fun saveProgress(positionMs: Long, durationMs: Long, updateResumeState: Boolean = false) {
         val state = _uiState.value
+        if (state.playerLoading || state.playableMedia == null) return
         val detail = state.detail ?: return
         val lines = detail.getPlayLines()
         val playLine = lines.getOrNull(state.selectedSourceIndex) ?: return
