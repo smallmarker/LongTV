@@ -221,8 +221,6 @@ fun PhoneFullscreenGestureLayer(
                                         when {
                                             angle <= resolvedConfig.horizontalAngleMaxDegrees -> PhoneGestureType.SEEK
                                             angle >= resolvedConfig.verticalAngleMinDegrees && verticalZone != null -> verticalZone
-                                            absX >= absY -> PhoneGestureType.SEEK
-                                            verticalZone != null -> verticalZone
                                             else -> null
                                         }?.also {
                                             activeType = it

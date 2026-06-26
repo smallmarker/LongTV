@@ -7,11 +7,13 @@ import org.junit.Test
 
 class PlayerGestureDetectorTest {
     private val config = PlayerGestureConfig(
-        triggerDistancePx = 10f,
-        edgeIgnorePx = 15f,
+        triggerDistancePx = 24f,
+        edgeIgnorePx = 20f,
         reservedBottomPx = 80f,
-        verticalSensitivityPx = 8f,
-        seekSensitivity = 0.8f,
+        verticalSensitivityPx = 16f,
+        seekSensitivity = 0.35f,
+        horizontalAngleMaxDegrees = 22f,
+        verticalAngleMinDegrees = 68f,
         doubleTapTimeoutMs = 260L,
         doubleTapSlopPx = 80f
     )
@@ -33,7 +35,7 @@ class PlayerGestureDetectorTest {
         val events = detector.onMove(100f, 120f)
 
         assertTrue(events.any { it is PlayerGestureEvent.GestureStart && it.type == PhoneGestureType.BRIGHTNESS })
-        assertTrue(events.any { it is PlayerGestureEvent.BrightnessChange && it.percent == 60 })
+        assertTrue(events.any { it is PlayerGestureEvent.BrightnessChange && it.percent == 55 })
         assertFalse(events.any { it is PlayerGestureEvent.VolumeChange })
         assertFalse(events.any { it is PlayerGestureEvent.SeekPreview })
     }
@@ -46,8 +48,8 @@ class PlayerGestureDetectorTest {
         val firstMove = detector.onMove(100f, 160f)
         val secondMove = detector.onMove(100f, 80f)
 
-        assertTrue(firstMove.any { it is PlayerGestureEvent.BrightnessChange && it.percent == 55 })
-        assertTrue(secondMove.any { it is PlayerGestureEvent.BrightnessChange && it.percent == 65 })
+        assertTrue(firstMove.any { it is PlayerGestureEvent.BrightnessChange && it.percent == 53 })
+        assertTrue(secondMove.any { it is PlayerGestureEvent.BrightnessChange && it.percent == 58 })
         assertFalse(secondMove.any { it is PlayerGestureEvent.GestureStart })
     }
 
@@ -59,7 +61,7 @@ class PlayerGestureDetectorTest {
         val events = detector.onMove(800f, 120f)
 
         assertTrue(events.any { it is PlayerGestureEvent.GestureStart && it.type == PhoneGestureType.VOLUME })
-        assertTrue(events.any { it is PlayerGestureEvent.VolumeChange && it.percent == 50 })
+        assertTrue(events.any { it is PlayerGestureEvent.VolumeChange && it.percent == 45 })
         assertFalse(events.any { it is PlayerGestureEvent.BrightnessChange })
         assertFalse(events.any { it is PlayerGestureEvent.SeekPreview })
     }
@@ -74,7 +76,7 @@ class PlayerGestureDetectorTest {
 
         val preview = previewEvents.filterIsInstance<PlayerGestureEvent.SeekPreview>().single()
         val commit = commitEvents.filterIsInstance<PlayerGestureEvent.SeekCommit>().single()
-        assertEquals(76_000L, preview.state.targetPositionMs)
+        assertEquals(67_000L, preview.state.targetPositionMs)
         assertEquals(preview.state, commit.state)
         assertTrue(commitEvents.any { it is PlayerGestureEvent.GestureEnd && it.type == PhoneGestureType.SEEK })
     }
@@ -89,9 +91,21 @@ class PlayerGestureDetectorTest {
 
         val firstPreview = firstMove.filterIsInstance<PlayerGestureEvent.SeekPreview>().single()
         val secondPreview = secondMove.filterIsInstance<PlayerGestureEvent.SeekPreview>().single()
-        assertEquals(69_600L, firstPreview.state.targetPositionMs)
-        assertEquals(88_800L, secondPreview.state.targetPositionMs)
+        assertEquals(64_200L, firstPreview.state.targetPositionMs)
+        assertEquals(72_600L, secondPreview.state.targetPositionMs)
         assertFalse(secondMove.any { it is PlayerGestureEvent.GestureStart })
+    }
+
+    @Test
+    fun ambiguousDiagonalMoveDoesNotLockGesture() {
+        val detector = PlayerGestureDetector(config)
+
+        detector.onDown(100f, 200f, 0L, context)
+        val moveEvents = detector.onMove(130f, 178f)
+        val upEvents = detector.onUp(130f, 178f, 100L)
+
+        assertTrue(moveEvents.isEmpty())
+        assertEquals(listOf(PlayerGestureEvent.Tap), upEvents)
     }
 
     @Test

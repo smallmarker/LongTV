@@ -7,13 +7,13 @@ import kotlin.math.roundToInt
 import kotlin.math.roundToLong
 
 data class PlayerGestureConfig(
-    val triggerDistancePx: Float = 10f,
-    val edgeIgnorePx: Float = 15f,
+    val triggerDistancePx: Float = 24f,
+    val edgeIgnorePx: Float = 20f,
     val reservedBottomPx: Float = 80f,
-    val verticalSensitivityPx: Float = 8f,
-    val seekSensitivity: Float = 0.8f,
-    val horizontalAngleMaxDegrees: Float = 30f,
-    val verticalAngleMinDegrees: Float = 60f,
+    val verticalSensitivityPx: Float = 16f,
+    val seekSensitivity: Float = 0.35f,
+    val horizontalAngleMaxDegrees: Float = 22f,
+    val verticalAngleMinDegrees: Float = 68f,
     val doubleTapTimeoutMs: Long = 260L,
     val doubleTapSlopPx: Float = 80f
 )
@@ -181,8 +181,6 @@ class PlayerGestureDetector(
         return when {
             angle <= config.horizontalAngleMaxDegrees -> PhoneGestureType.SEEK
             angle >= config.verticalAngleMinDegrees && zone != null -> zone
-            absX >= absY -> PhoneGestureType.SEEK
-            zone != null -> zone
             else -> null
         }
     }
