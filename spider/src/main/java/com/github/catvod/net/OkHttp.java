@@ -41,9 +41,7 @@ public class OkHttp {
     }
 
     public static Dns dns() {
-//        return get().dns != null ? get().dns : Dns.SYSTEM; // 由于 setDoh(Doh doh)没有被调用导致这里选择的是 Dns.SYSTEM
-//        return get().dns != null ? get().dns : OkGoHelper.dnsOverHttps;
-        return get().dns;
+        return get().dns != null ? get().dns : Dns.SYSTEM;
     }
 
     public void setDoh(DoH doh) {

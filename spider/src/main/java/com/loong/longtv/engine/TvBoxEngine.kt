@@ -3,6 +3,7 @@ package com.loong.longtv.engine
 import android.content.Context
 import com.loong.longtv.engine.config.ConfigManager
 import com.loong.longtv.engine.config.ConfigSource
+import com.loong.longtv.engine.live.LiveSpider
 import com.loong.longtv.engine.player.PlayerResolver
 import com.loong.longtv.engine.source.SourceRepository
 import com.loong.longtv.engine.source.model.TvBoxConfig
@@ -20,6 +21,7 @@ class TvBoxEngine(context: Context) {
     val spiderManager = SpiderManager(context)
     val sourceRepository = SourceRepository(spiderManager)
     val playerResolver = PlayerResolver()
+    val liveSpider = LiveSpider()
 
     /** 当前活跃配置 */
     val currentConfig: TvBoxConfig? get() = configManager.currentConfig

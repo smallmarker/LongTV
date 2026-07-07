@@ -1,5 +1,17 @@
 {
     "spider": "",
+    "lives": [
+        {
+            "name": "vbskycn IPTV4",
+            "type": 1,
+            "url": "https://live.zbds.top/tv/iptv4.m3u"
+        },
+        {
+            "name": "vbskycn IPTV4 GitHub备用",
+            "type": 1,
+            "url": "https://raw.githubusercontent.com/vbskycn/iptv/refs/heads/master/tv/iptv4.m3u"
+        }
+    ],
     "sites": [
         {
             "key": "热播影视",

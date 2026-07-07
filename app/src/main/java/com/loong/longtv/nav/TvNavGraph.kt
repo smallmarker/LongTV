@@ -13,6 +13,7 @@ import com.loong.longtv.ui.tv.detail.VideoDetailTvScreen
 import com.loong.longtv.ui.tv.favorite.FavoriteTvScreen
 import com.loong.longtv.ui.tv.history.HistoryTvScreen
 import com.loong.longtv.ui.tv.home.HomeTvScreen
+import com.loong.longtv.ui.tv.live.LiveTvScreen
 import com.loong.longtv.ui.tv.popular.PopularTvScreen
 import com.loong.longtv.ui.tv.search.SearchResultTvScreen
 import com.loong.longtv.ui.tv.search.SearchTvScreen
@@ -29,6 +30,10 @@ fun TvNavGraph() {
 
         composable(Screen.Popular.route) {
             PopularTvScreen(navController = navController)
+        }
+
+        composable(Screen.Live.route) {
+            LiveTvScreen(navController = navController)
         }
 
         composable(Screen.Search.route) {

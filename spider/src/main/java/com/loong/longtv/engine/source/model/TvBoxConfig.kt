@@ -80,6 +80,14 @@ data class LiveConfig(
     val logo: String? = null
 )
 
+data class LiveChannel(
+    val name: String,
+    val url: String,
+    val group: String = "",
+    val logo: String = "",
+    val sourceName: String = "",
+)
+
 /**
  * 解析接口配置 - 当Spider返回parse=1时使用
  */

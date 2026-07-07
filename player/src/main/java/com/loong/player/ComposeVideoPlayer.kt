@@ -17,6 +17,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.net.toUri
+import androidx.media3.common.C
 import androidx.media3.common.MediaItem
 import androidx.media3.common.PlaybackException
 import androidx.media3.common.Player
@@ -29,6 +30,7 @@ import androidx.media3.datasource.cache.LeastRecentlyUsedCacheEvictor
 import androidx.media3.datasource.cache.SimpleCache
 import androidx.media3.exoplayer.DefaultLoadControl
 import androidx.media3.exoplayer.ExoPlayer
+import androidx.media3.exoplayer.source.BehindLiveWindowException
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
 import androidx.media3.ui.AspectRatioFrameLayout
 import androidx.media3.ui.PlayerView
@@ -53,6 +55,8 @@ fun ComposeVideoPlayer(
     enableNativeController: Boolean = true,
     sharedSessionEnabled: Boolean = false,
     sharedSessionReleaseDelayMs: Long = 1_500L,
+    cacheEnabled: Boolean = true,
+    liveStream: Boolean = false,
     touchControllerEnabled: Boolean = true,
     resizeMode: PlayerResizeMode = PlayerResizeMode.Fit,
     controlState: PlayerControlState? = null,
@@ -73,27 +77,36 @@ fun ComposeVideoPlayer(
     val latestOnPlaybackError by rememberUpdatedState(onPlaybackError)
     val currentResizeMode = controlState?.resizeMode ?: resizeMode
     val useNativeController = enableNativeController && (showController || touchControllerEnabled)
-    val player = remember(videoUrl, requestHeaders, sharedSessionEnabled) {
+    val player = remember(videoUrl, requestHeaders, sharedSessionEnabled, cacheEnabled, liveStream) {
         if (sharedSessionEnabled) {
-            SharedPlayerSession.acquire(context, videoUrl, requestHeaders, repeat)
+            SharedPlayerSession.acquire(context, videoUrl, requestHeaders, repeat, cacheEnabled, liveStream)
         } else {
-            createExoPlayer(context, requestHeaders, repeat)
+            createExoPlayer(context, requestHeaders, repeat, cacheEnabled, liveStream)
         }
     }
 
-    LaunchedEffect(player, videoUrl, requestHeaders, sharedSessionEnabled) {
+    LaunchedEffect(player, videoUrl, requestHeaders, sharedSessionEnabled, cacheEnabled, liveStream) {
         try {
-            if (!sharedSessionEnabled || SharedPlayerSession.needsPrepare(videoUrl, requestHeaders)) {
+            if (!sharedSessionEnabled || SharedPlayerSession.needsPrepare(videoUrl, requestHeaders, cacheEnabled, liveStream)) {
                 val mimeType = MediaMimeTypes.infer(videoUrl)
-                val item = if (mimeType != null) {
-                    MediaItem.Builder().setUri(videoUrl.toUri()).setMimeType(mimeType).build()
-                } else {
-                    MediaItem.fromUri(videoUrl.toUri())
+                val itemBuilder = MediaItem.Builder().setUri(videoUrl.toUri())
+                if (mimeType != null) {
+                    itemBuilder.setMimeType(mimeType)
                 }
+                if (liveStream) {
+                    itemBuilder.setLiveConfiguration(
+                        MediaItem.LiveConfiguration.Builder()
+                            .setTargetOffsetMs(LIVE_TARGET_OFFSET_MS)
+                            .setMinOffsetMs(LIVE_MIN_OFFSET_MS)
+                            .setMaxOffsetMs(LIVE_MAX_OFFSET_MS)
+                            .build()
+                    )
+                }
+                val item = itemBuilder.build()
                 player.setMediaItem(item)
                 player.prepare()
                 if (initialPositionMs > 0) player.seekTo(initialPositionMs)
-                SharedPlayerSession.markPrepared(videoUrl, requestHeaders)
+                SharedPlayerSession.markPrepared(videoUrl, requestHeaders, cacheEnabled, liveStream)
             } else if (initialPositionMs > 0 && player.currentPosition <= 0L) {
                 player.seekTo(initialPositionMs)
             }
@@ -150,8 +163,15 @@ fun ComposeVideoPlayer(
             }
 
             override fun onPlayerError(error: PlaybackException) {
+                if (liveStream && error.hasCause<BehindLiveWindowException>()) {
+                    Log.w("ComposeVideoPlayer", "live window drift recovered for url=$videoUrl")
+                    player.recoverLiveWindow(autoPlay)
+                    latestOnPlaybackStateChanged?.invoke(Player.STATE_BUFFERING)
+                    latestOnPlaybackError?.invoke(BEHIND_LIVE_WINDOW_ERROR)
+                    return
+                }
                 Log.e("ComposeVideoPlayer", "player error for url=$videoUrl", error)
-                latestOnPlaybackError?.invoke(error.message ?: "播放失败")
+                latestOnPlaybackError?.invoke(error.toUserMessage())
             }
         }
         player.addListener(listener)
@@ -171,6 +191,11 @@ fun ComposeVideoPlayer(
         while (true) {
             delay(1_000)
             if (player.currentMediaItem != null) {
+                if (liveStream && player.shouldResyncLiveWindow()) {
+                    Log.w("ComposeVideoPlayer", "live offset too large, resync url=$videoUrl offset=${player.currentLiveOffset}")
+                    player.recoverLiveWindow(autoPlay)
+                    latestOnPlaybackStateChanged?.invoke(Player.STATE_BUFFERING)
+                }
                 latestOnProgressChanged(player.currentPosition, player.duration.coerceAtLeast(0))
             }
         }
@@ -208,8 +233,10 @@ fun ComposeVideoPlayer(
                 controllerAutoShow = useNativeController
                 controllerHideOnTouch = true
                 this.resizeMode = currentResizeMode.toMedia3ResizeMode()
-                setKeepContentOnPlayerReset(true)
-                setShutterBackgroundColor(android.graphics.Color.TRANSPARENT)
+                setKeepContentOnPlayerReset(!liveStream)
+                setShutterBackgroundColor(
+                    if (liveStream) android.graphics.Color.BLACK else android.graphics.Color.TRANSPARENT
+                )
                 setSurfaceTapListener(onSurfaceTap)
                 setControllerVisibilityListener(
                     ControllerVisibilityListener { visibility ->
@@ -228,8 +255,10 @@ fun ComposeVideoPlayer(
             playerView.controllerAutoShow = useNativeController
             playerView.controllerHideOnTouch = true
             playerView.resizeMode = currentResizeMode.toMedia3ResizeMode()
-            playerView.setKeepContentOnPlayerReset(true)
-            playerView.setShutterBackgroundColor(android.graphics.Color.TRANSPARENT)
+            playerView.setKeepContentOnPlayerReset(!liveStream)
+            playerView.setShutterBackgroundColor(
+                if (liveStream) android.graphics.Color.BLACK else android.graphics.Color.TRANSPARENT
+            )
             playerView.setSurfaceTapListener(onSurfaceTap)
             playerView.setControllerVisibilityListener(
                 ControllerVisibilityListener { visibility ->
@@ -302,30 +331,47 @@ private fun View.installSurfaceTapListener(onSurfaceTap: (() -> Unit)?) {
 private fun createExoPlayer(
     context: Context,
     requestHeaders: Map<String, String>,
-    repeat: Boolean
+    repeat: Boolean,
+    cacheEnabled: Boolean,
+    liveStream: Boolean
 ): ExoPlayer {
     val httpFactory = DefaultHttpDataSource.Factory()
         .setUserAgent(DEFAULT_VIDEO_USER_AGENT)
         .setConnectTimeoutMs(10_000)
-        .setReadTimeoutMs(15_000)
+        .setReadTimeoutMs(if (liveStream) 25_000 else 15_000)
         .setAllowCrossProtocolRedirects(true)
         .setDefaultRequestProperties(requestHeaders)
     val upstreamFactory = DefaultDataSource.Factory(context, httpFactory)
-    val dataSourceFactory = CacheDataSource.Factory()
-        .setCache(VideoPlayerCache.get(context))
-        .setUpstreamDataSourceFactory(upstreamFactory)
-        .setFlags(CacheDataSource.FLAG_IGNORE_CACHE_ON_ERROR)
+    val dataSourceFactory = if (cacheEnabled) {
+        CacheDataSource.Factory()
+            .setCache(VideoPlayerCache.get(context))
+            .setUpstreamDataSourceFactory(upstreamFactory)
+            .setFlags(CacheDataSource.FLAG_IGNORE_CACHE_ON_ERROR)
+    } else {
+        upstreamFactory
+    }
 
     return ExoPlayer.Builder(context)
         .setMediaSourceFactory(DefaultMediaSourceFactory(dataSourceFactory))
-        .setLoadControl(createStreamingLoadControl())
+        .setLoadControl(createStreamingLoadControl(liveStream))
         .build()
         .apply {
             repeatMode = if (repeat) Player.REPEAT_MODE_ONE else Player.REPEAT_MODE_OFF
         }
 }
 
-private fun createStreamingLoadControl(): DefaultLoadControl {
+private fun createStreamingLoadControl(liveStream: Boolean): DefaultLoadControl {
+    if (liveStream) {
+        return DefaultLoadControl.Builder()
+            .setBufferDurationsMs(
+                25_000,
+                120_000,
+                4_000,
+                8_000
+            )
+            .setPrioritizeTimeOverSizeThresholds(true)
+            .build()
+    }
     return DefaultLoadControl.Builder()
         .setBufferDurationsMs(
             15_000,
@@ -357,6 +403,35 @@ private object VideoPlayerCache {
 }
 
 private const val DEFAULT_VIDEO_USER_AGENT = "LongTV/1.0 Android VideoPlayer"
+private const val LIVE_TARGET_OFFSET_MS = 30_000L
+private const val LIVE_MIN_OFFSET_MS = 15_000L
+private const val LIVE_MAX_OFFSET_MS = 60_000L
+private const val LIVE_RESYNC_OFFSET_MS = 75_000L
+private const val BEHIND_LIVE_WINDOW_ERROR = "BehindLiveWindowException"
+
+private fun PlaybackException.toUserMessage(): String {
+    val details = generateSequence<Throwable>(this) { it.cause }
+        .mapNotNull { it.message }
+        .distinct()
+        .joinToString("；")
+    return details.ifBlank { message ?: "播放失败" }
+}
+
+private inline fun <reified T : Throwable> Throwable.hasCause(): Boolean {
+    return generateSequence<Throwable>(this) { it.cause }.any { it is T }
+}
+
+private fun ExoPlayer.shouldResyncLiveWindow(): Boolean {
+    if (!isCurrentMediaItemLive) return false
+    val offset = currentLiveOffset
+    return offset != C.TIME_UNSET && offset > LIVE_RESYNC_OFFSET_MS
+}
+
+private fun ExoPlayer.recoverLiveWindow(autoPlay: Boolean) {
+    seekToDefaultPosition()
+    prepare()
+    playWhenReady = autoPlay
+}
 
 private object SharedPlayerSession {
     private val scope = MainScope()
@@ -371,17 +446,19 @@ private object SharedPlayerSession {
         context: Context,
         videoUrl: String,
         requestHeaders: Map<String, String>,
-        repeat: Boolean
+        repeat: Boolean,
+        cacheEnabled: Boolean,
+        liveStream: Boolean
     ): ExoPlayer {
         releaseJob?.cancel()
-        val key = buildKey(videoUrl, requestHeaders)
+        val key = buildKey(videoUrl, requestHeaders, cacheEnabled, liveStream)
         val existing = player
         return if (existing != null && mediaKey == key) {
             refCount += 1
             existing
         } else {
             existing?.release()
-            val created = createExoPlayer(context.applicationContext, requestHeaders, repeat)
+            val created = createExoPlayer(context.applicationContext, requestHeaders, repeat, cacheEnabled, liveStream)
             player = created
             attachedView = null
             mediaKey = key
@@ -391,12 +468,22 @@ private object SharedPlayerSession {
         }
     }
 
-    fun needsPrepare(videoUrl: String, requestHeaders: Map<String, String>): Boolean {
-        return preparedKey != buildKey(videoUrl, requestHeaders)
+    fun needsPrepare(
+        videoUrl: String,
+        requestHeaders: Map<String, String>,
+        cacheEnabled: Boolean,
+        liveStream: Boolean
+    ): Boolean {
+        return preparedKey != buildKey(videoUrl, requestHeaders, cacheEnabled, liveStream)
     }
 
-    fun markPrepared(videoUrl: String, requestHeaders: Map<String, String>) {
-        preparedKey = buildKey(videoUrl, requestHeaders)
+    fun markPrepared(
+        videoUrl: String,
+        requestHeaders: Map<String, String>,
+        cacheEnabled: Boolean,
+        liveStream: Boolean
+    ) {
+        preparedKey = buildKey(videoUrl, requestHeaders, cacheEnabled, liveStream)
     }
 
     fun release(target: ExoPlayer, delayMs: Long) {
@@ -435,8 +522,13 @@ private object SharedPlayerSession {
         attachedView = null
     }
 
-    private fun buildKey(videoUrl: String, requestHeaders: Map<String, String>): String {
-        return videoUrl + "#" + requestHeaders.toList()
+    private fun buildKey(
+        videoUrl: String,
+        requestHeaders: Map<String, String>,
+        cacheEnabled: Boolean,
+        liveStream: Boolean
+    ): String {
+        return videoUrl + "#cache=$cacheEnabled#live=$liveStream#" + requestHeaders.toList()
             .sortedBy { it.first }
             .joinToString("&") { "${it.first}=${it.second}" }
     }

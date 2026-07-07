@@ -21,6 +21,7 @@ import com.loong.longtv.ui.phone.detail.VideoDetailPhoneScreen
 import com.loong.longtv.ui.phone.favorite.FavoritePhoneScreen
 import com.loong.longtv.ui.phone.history.HistoryPhoneScreen
 import com.loong.longtv.ui.phone.home.HomePhoneScreen
+import com.loong.longtv.ui.phone.live.LivePhoneScreen
 import com.loong.longtv.ui.phone.popular.PopularPhoneScreen
 import com.loong.longtv.ui.phone.search.SearchPhoneScreen
 import com.loong.longtv.ui.phone.search.SearchResultPhoneScreen
@@ -31,7 +32,7 @@ fun PhoneNavGraph() {
     val navController = rememberNavController()
     val backStackEntry by navController.currentBackStackEntryAsState()
     val route = backStackEntry?.destination?.route
-    val navModifier = if (route == Screen.FullscreenPlayer.route) {
+    val navModifier = if (route == Screen.FullscreenPlayer.route || route == Screen.Live.route) {
         Modifier
     } else {
         Modifier.windowInsetsPadding(
@@ -52,6 +53,10 @@ fun PhoneNavGraph() {
 
         composable(Screen.Popular.route) {
             PopularPhoneScreen(navController = navController)
+        }
+
+        composable(Screen.Live.route) {
+            LivePhoneScreen(navController = navController)
         }
 
         composable(Screen.Search.route) {

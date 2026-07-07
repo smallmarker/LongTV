@@ -65,6 +65,7 @@ import com.loong.longtv.ui.theme.AppError
 import com.loong.longtv.ui.theme.AppTextMuted
 import com.loong.longtv.ui.theme.AppTextPrimary
 import com.loong.longtv.ui.theme.AppThemeTokens
+import com.loong.longtv.ui.theme.BrandAccent
 import com.loong.longtv.ui.theme.BrandPrimary
 import com.loong.longtv.utils.extensions.prefetchSmartImages
 
@@ -110,6 +111,7 @@ internal fun HomeScreenContent(
         MinimalHomeHeader(
             isTv = isTv,
             onSearch = { navController.navigate(Screen.Search.route) },
+            onLive = { navController.navigate(Screen.Live.route) },
             onSettings = { navController.navigate(Screen.Settings.route) },
             searchFocusRequester = searchFocusRequester,
             onSearchFocusChanged = { searchFocused = it }
@@ -165,6 +167,7 @@ internal fun HomeScreenContent(
 private fun MinimalHomeHeader(
     isTv: Boolean,
     onSearch: () -> Unit,
+    onLive: () -> Unit,
     onSettings: () -> Unit,
     searchFocusRequester: FocusRequester,
     onSearchFocusChanged: (Boolean) -> Unit,
@@ -226,42 +229,54 @@ private fun MinimalHomeHeader(
             }
 
             if (isTv) {
-                Box(
-                    modifier = Modifier
-                        .size(54.dp)
-                        .padding(4.dp),
-                    contentAlignment = Alignment.Center
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(10.dp),
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
-                    TvSurface(
-                        onClick = onSettings,
-                        modifier = Modifier.fillMaxSize()
+                    HeaderLiveButton(isTv = true, onLive = onLive)
+                    Box(
+                        modifier = Modifier
+                            .size(54.dp)
+                            .padding(4.dp),
+                        contentAlignment = Alignment.Center
                     ) {
-                        Box(
-                            modifier = Modifier.fillMaxSize(),
-                            contentAlignment = Alignment.Center
+                        TvSurface(
+                            onClick = onSettings,
+                            modifier = Modifier.fillMaxSize()
                         ) {
-                            Icon(
-                                imageVector = Icons.Default.Settings,
-                                contentDescription = "设置",
-                                tint = AppTextPrimary,
-                                modifier = Modifier.size(23.dp)
-                            )
+                            Box(
+                                modifier = Modifier.fillMaxSize(),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.Settings,
+                                    contentDescription = "设置",
+                                    tint = AppTextPrimary,
+                                    modifier = Modifier.size(23.dp)
+                                )
+                            }
                         }
                     }
                 }
             } else {
-                Box(
-                    modifier = Modifier
-                        .size(38.dp)
-                        .clickable(onClick = onSettings),
-                    contentAlignment = Alignment.Center
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Icon(
-                        imageVector = Icons.Default.Settings,
-                        contentDescription = "设置",
-                        tint = AppTextPrimary,
-                        modifier = Modifier.size(20.dp)
-                    )
+                    HeaderLiveButton(isTv = false, onLive = onLive)
+                    Box(
+                        modifier = Modifier
+                            .size(38.dp)
+                            .clickable(onClick = onSettings),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Settings,
+                            contentDescription = "设置",
+                            tint = AppTextPrimary,
+                            modifier = Modifier.size(20.dp)
+                        )
+                    }
                 }
             }
         }
@@ -273,6 +288,71 @@ private fun MinimalHomeHeader(
                 modifier = Modifier.fillMaxWidth()
             )
         }
+    }
+}
+
+@OptIn(ExperimentalTvMaterial3Api::class)
+@Composable
+private fun HeaderLiveButton(
+    isTv: Boolean,
+    onLive: () -> Unit,
+) {
+    val shape = RoundedCornerShape(if (isTv) 14.dp else 18.dp)
+    if (isTv) {
+        Box(
+            modifier = Modifier
+                .width(116.dp)
+                .height(54.dp)
+                .padding(4.dp),
+            contentAlignment = Alignment.Center
+        ) {
+            TvSurface(
+                onClick = onLive,
+                modifier = Modifier.fillMaxSize()
+            ) {
+                LiveButtonContent(
+                    isTv = true,
+                    modifier = Modifier.fillMaxSize()
+                )
+            }
+        }
+    } else {
+        Box(
+            modifier = Modifier
+                .height(34.dp)
+                .clickable(onClick = onLive)
+                .padding(horizontal = 12.dp),
+            contentAlignment = Alignment.Center
+        ) {
+            LiveButtonContent(isTv = false)
+        }
+    }
+}
+
+@Composable
+private fun LiveButtonContent(
+    isTv: Boolean,
+    modifier: Modifier = Modifier,
+) {
+    Row(
+        modifier = modifier,
+        horizontalArrangement = Arrangement.Center,
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Box(
+            modifier = Modifier
+                .size(if (isTv) 8.dp else 6.dp)
+                .clip(RoundedCornerShape(50.dp))
+                .background(BrandAccent)
+        )
+        Text(
+            text = "直播 LIVE",
+            color = AppTextPrimary,
+            fontSize = if (isTv) 15.sp else 12.sp,
+            fontWeight = FontWeight.Bold,
+            maxLines = 1,
+            modifier = Modifier.padding(start = if (isTv) 8.dp else 5.dp)
+        )
     }
 }
 
