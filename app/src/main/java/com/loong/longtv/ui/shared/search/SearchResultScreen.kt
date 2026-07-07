@@ -3,8 +3,6 @@ package com.loong.longtv.ui.shared.search
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.ExperimentalLayoutApi
-import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
@@ -26,6 +24,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -42,6 +41,7 @@ import com.loong.longtv.ui.shared.widgets.AdaptiveChipTabs
 import com.loong.longtv.ui.shared.widgets.AppButton
 import com.loong.longtv.ui.shared.widgets.SectionHeader
 import com.loong.longtv.ui.shared.widgets.TvSurface
+import com.loong.longtv.utils.extensions.prefetchSmartImages
 
 /**
  * @author zl
@@ -104,7 +104,8 @@ internal fun SearchResultContent(
     } else {
         Row(horizontalArrangement = Arrangement.spacedBy(20.dp)) {
             LazyColumn(
-                modifier = Modifier.width(220.dp),
+                modifier = Modifier.width(236.dp),
+                contentPadding = PaddingValues(start = 8.dp, top = 6.dp, end = 8.dp, bottom = 8.dp),
                 verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 items(categories) { category ->
@@ -141,6 +142,15 @@ internal fun SearchResultGrid(
     navigator: NavController,
     phoneLayout: Boolean
 ) {
+    val context = LocalContext.current
+    LaunchedEffect(videos) {
+        prefetchSmartImages(
+            context = context,
+            models = videos.map { it.pic },
+            limit = if (phoneLayout) 18 else 36
+        )
+    }
+
     LazyVerticalGrid(
         modifier = modifier,
         columns = if (phoneLayout) GridCells.Fixed(2) else GridCells.Adaptive(150.dp),
@@ -164,7 +174,6 @@ internal fun SearchResultGrid(
     }
 }
 
-@OptIn(ExperimentalLayoutApi::class)
 @Composable
 internal fun SearchHeader(
     keyword: String,
@@ -217,30 +226,6 @@ internal fun SearchHeader(
                     fontSize = 14.sp,
                     modifier = Modifier.padding(top = 4.dp, bottom = 8.dp)
                 )
-            }
-            if (family != null) {
-                FlowRow(
-                    modifier = Modifier,
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    verticalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    TvSurface(onClick = {}) {
-                        Text(
-                            text = "Spider: $family",
-                            color = AppTextPrimary,
-                            fontSize = 11.sp,
-                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 6.dp)
-                        )
-                    }
-                    TvSurface(onClick = {}) {
-                        Text(
-                            text = "结果: $resultCount",
-                            color = AppTextPrimary,
-                            fontSize = 11.sp,
-                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 6.dp)
-                        )
-                    }
-                }
             }
         }
     }

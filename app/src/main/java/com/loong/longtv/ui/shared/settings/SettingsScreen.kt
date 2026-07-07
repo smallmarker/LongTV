@@ -25,6 +25,9 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.tv.material3.Text
 import com.loong.longtv.engine.source.model.SiteConfig
+import com.loong.longtv.ui.common.DeviceClass
+import com.loong.longtv.ui.common.currentDeviceClass
+import com.loong.longtv.ui.shared.widgets.TvSurface
 import com.loong.longtv.ui.theme.AppError
 import com.loong.longtv.ui.theme.AppTextMuted
 import com.loong.longtv.ui.theme.AppTextPrimary
@@ -108,20 +111,49 @@ private fun PopularSiteCard(
     compact: Boolean,
     onClick: () -> Unit
 ) {
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clip(AppThemeTokens.cardShape())
-            .background(if (selected) BrandPrimary.copy(alpha = 0.16f) else Color.White.copy(alpha = 0.06f))
-            .border(
-                width = 1.dp,
-                color = if (selected) BrandPrimary.copy(alpha = 0.42f) else Color.White.copy(alpha = 0.08f),
-                shape = AppThemeTokens.cardShape()
-            )
-            .clickable(onClick = onClick)
-            .padding(if (compact) 13.dp else 16.dp),
-        verticalArrangement = Arrangement.spacedBy(10.dp)
-    ) {
+    val isTv = currentDeviceClass() == DeviceClass.TV
+
+    @Composable
+    fun CardContent(modifier: Modifier = Modifier) {
+        Column(
+            modifier = modifier
+                .fillMaxWidth()
+                .clip(AppThemeTokens.cardShape())
+                .background(if (selected) BrandPrimary.copy(alpha = 0.14f) else Color.White.copy(alpha = 0.06f))
+                .border(
+                    width = 1.dp,
+                    color = if (selected) BrandPrimary.copy(alpha = 0.34f) else Color.White.copy(alpha = 0.08f),
+                    shape = AppThemeTokens.cardShape()
+                )
+                .padding(if (compact) 13.dp else 16.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
+            PopularSiteCardBody(site = site, selected = selected, compact = compact)
+        }
+    }
+
+    if (isTv) {
+        TvSurface(
+            onClick = onClick,
+            shape = androidx.tv.material3.ClickableSurfaceDefaults.shape(AppThemeTokens.cardShape()),
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            CardContent()
+        }
+    } else {
+        CardContent(
+            modifier = Modifier.clickable(onClick = onClick)
+        )
+    }
+}
+
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun PopularSiteCardBody(
+    site: SiteConfig,
+    selected: Boolean,
+    compact: Boolean
+) {
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.SpaceBetween,
@@ -169,7 +201,6 @@ private fun PopularSiteCard(
             }
             PillText(text = site.spiderClassName().ifBlank { "本地站点" }, color = BrandSecondary)
         }
-    }
 }
 
 @Composable

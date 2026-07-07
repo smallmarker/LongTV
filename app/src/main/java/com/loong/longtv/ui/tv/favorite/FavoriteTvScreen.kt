@@ -17,6 +17,8 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -45,13 +47,14 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewModelScope
 import androidx.navigation.NavController
 import androidx.tv.material3.ClickableSurfaceDefaults
+import androidx.tv.material3.Icon
 import androidx.tv.material3.Text
 import com.loong.longtv.data.room.entity.FavoriteEntity
 import com.loong.longtv.engine.TvBoxEngine
 import com.loong.longtv.engine.source.model.VodInfo
 import com.loong.longtv.nav.Screen
+import com.loong.longtv.ui.shared.VideoPosterAspectRatio
 import com.loong.longtv.ui.shared.favorite.FavoriteViewModel
-import com.loong.longtv.ui.shared.widgets.AppButton
 import com.loong.longtv.ui.shared.widgets.AppScreen
 import com.loong.longtv.ui.shared.widgets.SmartAsyncImage
 import com.loong.longtv.ui.shared.widgets.TvSurface
@@ -67,6 +70,10 @@ import com.loong.longtv.ui.theme.AppThemeTokens
 import com.loong.longtv.ui.theme.BrandAccent
 import com.loong.longtv.ui.theme.BrandPrimary
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.Semaphore
+import kotlinx.coroutines.sync.withLock
+import kotlinx.coroutines.sync.withPermit
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -133,7 +140,7 @@ fun FavoriteTvScreen(
             }
         )
 
-        Spacer(modifier = Modifier.height(18.dp))
+        Spacer(modifier = Modifier.height(14.dp))
 
         if (editMode && favorites.isNotEmpty()) {
             FavoriteTvBatchBar(
@@ -162,7 +169,7 @@ fun FavoriteTvScreen(
                 }
             )
 
-            Spacer(modifier = Modifier.height(14.dp))
+            Spacer(modifier = Modifier.height(10.dp))
 
             FavoriteTvFilterBar(
                 totalCount = filteredFavorites.size,
@@ -176,7 +183,7 @@ fun FavoriteTvScreen(
         } else if (filteredFavorites.isEmpty()) {
             FavoriteTvFilteredEmptyState(selectedTab = selectedTab)
         } else {
-            Spacer(modifier = Modifier.height(20.dp))
+            Spacer(modifier = Modifier.height(28.dp))
             FavoriteTvGridSection(
                 favorites = filteredFavorites,
                 detailMap = detailMap,
@@ -214,7 +221,7 @@ private fun FavoriteTvTopBar(
     ) {
         TvSurface(
             onClick = onBack,
-            modifier = Modifier.width(132.dp),
+            modifier = Modifier.width(112.dp),
             colors = ClickableSurfaceDefaults.colors(
                 containerColor = AppCardOverlay.copy(alpha = 0.86f),
                 focusedContainerColor = BrandPrimary.copy(alpha = 0.16f),
@@ -230,15 +237,26 @@ private fun FavoriteTvTopBar(
                         color = Color.White.copy(alpha = 0.08f),
                         shape = AppThemeTokens.buttonShape()
                     )
-                    .padding(horizontal = 18.dp, vertical = 14.dp),
-                contentAlignment = Alignment.CenterStart
+                    .padding(horizontal = 14.dp, vertical = 10.dp),
+                contentAlignment = Alignment.Center
             ) {
-                Text(
-                    text = "返回",
-                    color = AppTextPrimary,
-                    fontSize = 20.sp,
-                    fontWeight = FontWeight.Medium
-                )
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Icon(
+                        imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                        contentDescription = "返回",
+                        tint = AppTextPrimary,
+                        modifier = Modifier.size(18.dp)
+                    )
+                    Text(
+                        text = "返回",
+                        color = AppTextPrimary,
+                        fontSize = 16.sp,
+                        fontWeight = FontWeight.Medium
+                    )
+                }
             }
         }
 
@@ -247,14 +265,14 @@ private fun FavoriteTvTopBar(
         Text(
             text = "我的收藏",
             color = AppTextPrimary,
-            fontSize = 30.sp,
+            fontSize = 28.sp,
             fontWeight = FontWeight.Bold
         )
 
         Spacer(modifier = Modifier.weight(1f))
 
         Row(
-            modifier = Modifier.width(132.dp),
+            modifier = Modifier.width(112.dp),
             horizontalArrangement = Arrangement.End
         ) {
             FavoriteTvTopActionChip(
@@ -281,8 +299,8 @@ private fun FavoriteTvCategoryBar(
                 color = Color.White.copy(alpha = 0.08f),
                 shape = AppThemeTokens.cardShape()
             )
-            .padding(horizontal = 18.dp, vertical = 12.dp),
-        horizontalArrangement = Arrangement.spacedBy(14.dp),
+            .padding(horizontal = 14.dp, vertical = 10.dp),
+        horizontalArrangement = Arrangement.spacedBy(10.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
         for (category in TvFavoriteCategory.entries) {
@@ -310,17 +328,17 @@ private fun FavoriteTvFilterBar(
                 color = Color.White.copy(alpha = 0.08f),
                 shape = AppThemeTokens.cardShape()
             )
-            .padding(horizontal = 22.dp, vertical = 14.dp),
+            .padding(horizontal = 18.dp, vertical = 10.dp),
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically
     ) {
         Text(
             text = "共 $totalCount 部收藏",
             color = AppTextPrimary,
-            fontSize = 18.sp,
+            fontSize = 16.sp,
             fontWeight = FontWeight.Medium
         )
-        Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+        Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
             FavoriteTvSortChip(text = "最近收藏 ${timeSort.label}", onClick = onToggleTimeSort)
         }
     }
@@ -343,7 +361,7 @@ private fun FavoriteTvBatchBar(
                 color = Color.White.copy(alpha = 0.08f),
                 shape = AppThemeTokens.cardShape()
             )
-            .padding(horizontal = 22.dp, vertical = 16.dp),
+            .padding(horizontal = 18.dp, vertical = 12.dp),
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically
     ) {
@@ -384,10 +402,10 @@ private fun FavoriteTvGridSection(
         onVisibleItemsChanged(visibleItems)
     }
 
-    Column(verticalArrangement = Arrangement.spacedBy(18.dp)) {
-        Column(verticalArrangement = Arrangement.spacedBy(18.dp)) {
+    Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
+        Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
             visibleItems.chunked(TV_FAVORITE_COLUMNS).forEach { rowItems ->
-                Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+                Row(horizontalArrangement = Arrangement.spacedBy(14.dp)) {
                     rowItems.forEach { item ->
                         FavoriteTvPosterCard(
                             item = item,
@@ -436,8 +454,8 @@ private fun FavoriteTvPosterCard(
         modifier = modifier
             .onFocusChanged { focused = it.isFocused }
             .graphicsLayer {
-                scaleX = if (focused) 1.03f else 1f
-                scaleY = if (focused) 1.03f else 1f
+                scaleX = if (focused) 1.02f else 1f
+                scaleY = if (focused) 1.02f else 1f
             },
         colors = ClickableSurfaceDefaults.colors(
             containerColor = Color.Transparent,
@@ -488,7 +506,7 @@ private fun FavoriteTvPosterCard(
                     contentDescription = item.title,
                     modifier = Modifier
                         .fillMaxWidth()
-                        .aspectRatio(16f / 9f)
+                        .aspectRatio(VideoPosterAspectRatio)
                         .clip(AppThemeTokens.cardShape()),
                     contentScale = ContentScale.Crop,
                     fallbackText = item.title.ifBlank { "收藏内容" }
@@ -606,23 +624,23 @@ private fun FavoriteTvPagination(
                 color = Color.White.copy(alpha = 0.08f),
                 shape = AppThemeTokens.cardShape()
             )
-            .padding(vertical = 16.dp),
+            .padding(vertical = 10.dp),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
         Text(
             text = "第 ${currentPage + 1} / $pageCount 页",
             color = AppTextPrimary,
-            fontSize = 16.sp,
+            fontSize = 14.sp,
             fontWeight = FontWeight.SemiBold
         )
-        Spacer(modifier = Modifier.height(10.dp))
-        Row(horizontalArrangement = Arrangement.spacedBy(14.dp)) {
-            AppButton(
+        Spacer(modifier = Modifier.height(8.dp))
+        Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            FavoriteTvMiniChip(
                 text = if (currentPage > 0) "◀ 上一页" else "上一页",
                 onClick = onPrevious,
                 enabled = currentPage > 0
             )
-            AppButton(
+            FavoriteTvMiniChip(
                 text = if (currentPage < pageCount - 1) "下一页 ▶" else "下一页",
                 onClick = onNext,
                 enabled = currentPage < pageCount - 1
@@ -704,13 +722,13 @@ private fun FavoriteTvTopActionChip(
                     color = if (enabled) Color.White.copy(alpha = 0.08f) else Color.Transparent,
                     shape = AppThemeTokens.buttonShape()
                 )
-                .padding(horizontal = 16.dp, vertical = 12.dp),
+                .padding(horizontal = 14.dp, vertical = 9.dp),
             contentAlignment = Alignment.Center
         ) {
             Text(
                 text = text,
                 color = if (!enabled) AppTextMuted else if (prominent) BrandPrimary else AppTextPrimary,
-                fontSize = 18.sp,
+                fontSize = 16.sp,
                 fontWeight = FontWeight.Medium
             )
         }
@@ -742,20 +760,20 @@ private fun FavoriteTvTabChip(
     ) {
         Box(
             modifier = Modifier
-                .height(64.dp)
-                .heightIn(min = 64.dp, max = 64.dp)
+                .height(50.dp)
+                .heightIn(min = 50.dp, max = 50.dp)
                 .border(
                     width = 1.dp,
                     color = if (selected) BrandPrimary.copy(alpha = 0.40f) else Color.White.copy(alpha = 0.07f),
                     shape = AppThemeTokens.buttonShape()
                 )
-                .padding(horizontal = 18.dp),
+                .padding(horizontal = 14.dp),
             contentAlignment = Alignment.Center
         ) {
             Text(
                 text = "${category.emoji} ${category.label}",
                 color = if (selected) BrandPrimary else AppTextPrimary,
-                fontSize = 18.sp,
+                fontSize = 15.sp,
                 fontWeight = FontWeight.Medium
             )
         }
@@ -782,13 +800,13 @@ private fun FavoriteTvSortChip(
                     color = Color.White.copy(alpha = 0.08f),
                     shape = AppThemeTokens.buttonShape()
                 )
-                .padding(horizontal = 16.dp, vertical = 10.dp),
+                .padding(horizontal = 13.dp, vertical = 8.dp),
             contentAlignment = Alignment.Center
         ) {
             Text(
                 text = "▼ $text",
                 color = AppTextSecondary,
-                fontSize = 15.sp,
+                fontSize = 13.sp,
                 fontWeight = FontWeight.Medium
             )
         }
@@ -822,13 +840,13 @@ private fun FavoriteTvMiniChip(
                     color = if (warning && enabled) AppError.copy(alpha = 0.38f) else Color.White.copy(alpha = 0.08f),
                     shape = AppThemeTokens.buttonShape()
                 )
-                .padding(horizontal = 18.dp, vertical = 10.dp),
+                .padding(horizontal = 14.dp, vertical = 8.dp),
             contentAlignment = Alignment.Center
         ) {
             Text(
                 text = text,
                 color = if (!enabled) AppTextMuted else if (warning) AppError else AppTextPrimary,
-                fontSize = 16.sp,
+                fontSize = 14.sp,
                 fontWeight = FontWeight.Medium
             )
         }
@@ -870,9 +888,9 @@ private fun formatTvFavoriteDate(timeMillis: Long): String {
 }
 
 private const val TV_FAVORITE_COLUMNS = 5
-private const val TV_FAVORITE_PAGE_SIZE = 10
-private val TV_FAVORITE_CARD_HEIGHT = 292.dp
-private val TV_FAVORITE_EDIT_CARD_HEIGHT = 238.dp
+private const val TV_FAVORITE_PAGE_SIZE = 5
+private val TV_FAVORITE_CARD_HEIGHT = 430.dp
+private val TV_FAVORITE_EDIT_CARD_HEIGHT = 372.dp
 
 data class FavoriteTvCardMeta(
     val score: Double? = null,
@@ -888,14 +906,28 @@ class FavoriteTvDetailViewModel @Inject constructor(
     private val _detailMap = MutableStateFlow<Map<String, FavoriteTvCardMeta>>(emptyMap())
     val detailMap: StateFlow<Map<String, FavoriteTvCardMeta>> = _detailMap.asStateFlow()
     private val loadingKeys = mutableSetOf<String>()
+    private val loadingMutex = Mutex()
+    private val detailSemaphore = Semaphore(permits = 3)
 
     fun loadDetails(items: List<FavoriteEntity>) {
         for (item in items) {
-            if (_detailMap.value.containsKey(item.favoriteKey) || !loadingKeys.add(item.favoriteKey)) continue
             viewModelScope.launch {
-                val meta = loadDetailMeta(item)
+                val shouldLoad = loadingMutex.withLock {
+                    if (_detailMap.value.containsKey(item.favoriteKey) || !loadingKeys.add(item.favoriteKey)) {
+                        false
+                    } else {
+                        true
+                    }
+                }
+                if (!shouldLoad) return@launch
+
+                val meta = detailSemaphore.withPermit {
+                    loadDetailMeta(item)
+                }
                 _detailMap.update { current -> current + (item.favoriteKey to meta) }
-                loadingKeys.remove(item.favoriteKey)
+                loadingMutex.withLock {
+                    loadingKeys.remove(item.favoriteKey)
+                }
             }
         }
     }

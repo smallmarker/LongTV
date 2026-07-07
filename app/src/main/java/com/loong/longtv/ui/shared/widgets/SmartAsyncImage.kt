@@ -12,6 +12,8 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.sp
 import androidx.tv.material3.Text
 import coil3.compose.AsyncImage
+import coil3.request.CachePolicy
+import coil3.request.ImageRequest
 import com.loong.longtv.utils.extensions.provideSmartImageLoader
 
 /**
@@ -30,6 +32,15 @@ fun SmartAsyncImage(
     val imageLoader = remember { provideSmartImageLoader(context) }
     val stringModel = (model as? String)?.trim()
     val shouldFallback = stringModel != null && stringModel.isBlank()
+    val requestData = stringModel ?: model
+    val imageRequest = remember(requestData) {
+        ImageRequest.Builder(context)
+            .data(requestData)
+            .memoryCachePolicy(CachePolicy.ENABLED)
+            .diskCachePolicy(CachePolicy.ENABLED)
+            .networkCachePolicy(CachePolicy.ENABLED)
+            .build()
+    }
 
     if (shouldFallback) {
         Box(
@@ -46,7 +57,7 @@ fun SmartAsyncImage(
     }
 
     AsyncImage(
-        model = stringModel ?: model,
+        model = imageRequest,
         contentDescription = contentDescription,
         imageLoader = imageLoader,
         modifier = modifier,

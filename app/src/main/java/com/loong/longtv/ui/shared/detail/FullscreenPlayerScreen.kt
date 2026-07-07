@@ -6,7 +6,14 @@ import android.content.Context.AUDIO_SERVICE
 import android.content.ContextWrapper
 import android.content.pm.ActivityInfo
 import android.media.AudioManager
+import android.os.SystemClock
 import androidx.activity.compose.BackHandler
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
@@ -16,6 +23,7 @@ import androidx.compose.foundation.focusable
 import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -26,6 +34,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -42,6 +51,7 @@ import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -74,6 +84,7 @@ import com.loong.longtv.ui.shared.widgets.AppButton
 import com.loong.longtv.ui.shared.widgets.TvSurface
 import com.loong.longtv.ui.theme.AppCardOverlay
 import com.loong.longtv.ui.theme.AppError
+import com.loong.longtv.ui.theme.AppSurfaceVariant
 import com.loong.longtv.ui.theme.AppTextMuted
 import com.loong.longtv.ui.theme.AppTextPrimary
 import com.loong.longtv.ui.theme.AppTextSecondary
@@ -86,7 +97,10 @@ import com.loong.player.PlayerFeedbackPopup
 import com.loong.player.PlayerLoadingOverlay
 import com.loong.player.SeekOverlayState
 import com.loong.player.rememberPlayerInteractionState
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.isActive
+import kotlinx.coroutines.launch
 import kotlin.math.roundToInt
 import kotlin.math.roundToLong
 
@@ -133,6 +147,7 @@ internal fun FullscreenPlayerContent(
     var progressBarWidthPx by remember(title, videoUrl) { mutableFloatStateOf(1f) }
     var selectedQuality by remember(title, videoUrl) { mutableStateOf(qualityOptions[0]) }
     var activePanel by remember(title, videoUrl) { mutableStateOf<BottomPanel?>(null) }
+    var displayedPanel by remember(title, videoUrl) { mutableStateOf<BottomPanel?>(null) }
     val interactionState = rememberPlayerInteractionState(
         initialPositionMs = initialPositionMs,
         canAutoHideControls = playbackError == null && !isBuffering && activePanel == null
@@ -149,6 +164,11 @@ internal fun FullscreenPlayerContent(
     val tvSpeedPanelFocusRequester = remember(title, videoUrl) { FocusRequester() }
     val tvQualityPanelFocusRequester = remember(title, videoUrl) { FocusRequester() }
     val tvEpisodePanelFocusRequester = remember(title, videoUrl) { FocusRequester() }
+    val coroutineScope = rememberCoroutineScope()
+    var remoteSeekJob by remember(title, videoUrl) { mutableStateOf<Job?>(null) }
+    var remoteSeekDirection by remember(title, videoUrl) { mutableIntStateOf(0) }
+    var remoteSeekAnchorMs by remember(title, videoUrl) { mutableLongStateOf(0L) }
+    var remoteSeekPreviewMs by remember(title, videoUrl) { mutableLongStateOf(0L) }
 
     val episodeLabel = if (episodeCount > 0) "第${episodeIndex + 1}集" else "单集播放"
     val compactTitle = buildString {
@@ -168,8 +188,11 @@ internal fun FullscreenPlayerContent(
     }
 
     fun hideControls() {
-        activePanel = null
-        interactionState.hideControls()
+        if (activePanel != null || displayedPanel != null) {
+            activePanel = null
+        } else {
+            interactionState.hideControls()
+        }
     }
 
     fun toggleControls() {
@@ -187,7 +210,6 @@ internal fun FullscreenPlayerContent(
 
     fun closePanel() {
         activePanel = null
-        registerInteraction()
     }
 
     fun seekToPosition(positionMs: Long) {
@@ -215,8 +237,12 @@ internal fun FullscreenPlayerContent(
     }
 
     fun togglePanel(panel: BottomPanel) {
-        activePanel = if (activePanel == panel) null else panel
-        registerInteraction()
+        if (activePanel == panel) {
+            closePanel()
+        } else {
+            activePanel = panel
+            registerInteraction()
+        }
     }
 
     fun updateBrightnessPercent(targetPercent: Int) {
@@ -305,26 +331,74 @@ internal fun FullscreenPlayerContent(
         return (durationMs * percent).roundToLong()
     }
 
-    fun seekByRemote(offsetMs: Long) {
-        val duration = durationMs.takeIf { it > 0 } ?: return
-        val targetPosition = (currentPositionMs + offsetMs).coerceIn(0L, duration)
+    fun remoteSeekOverlayState(targetPositionMs: Long, anchorPositionMs: Long, direction: Int): SeekOverlayState {
+        val duration = durationMs.coerceAtLeast(0L)
         val reachedEdgeMessage = when {
-            targetPosition == 0L && offsetMs < 0L -> "已至开头"
-            targetPosition == duration && offsetMs > 0L -> "已至结尾"
+            targetPositionMs == 0L && direction < 0 -> "已至开头"
+            duration > 0L && targetPositionMs == duration && direction > 0 -> "已至结尾"
             else -> null
         }
-        controlState.seekBy(offsetMs)
+        return SeekOverlayState(
+            targetPositionMs = targetPositionMs,
+            durationMs = duration,
+            deltaMs = targetPositionMs - anchorPositionMs,
+            reachedEdgeMessage = reachedEdgeMessage
+        )
+    }
+
+    fun startRemoteSeek(direction: Int) {
+        val duration = durationMs.takeIf { it > 0 } ?: return
+        if (remoteSeekDirection == direction && remoteSeekJob?.isActive == true) return
+
+        remoteSeekJob?.cancel()
+        remoteSeekDirection = direction
+        remoteSeekAnchorMs = currentPositionMs.coerceIn(0L, duration)
+        remoteSeekPreviewMs = remoteSeekAnchorMs
+        activePanel = null
+        interactionState.beginGesture()
+
+        remoteSeekJob = coroutineScope.launch {
+            val startedAt = SystemClock.elapsedRealtime()
+            while (isActive) {
+                val elapsedMs = SystemClock.elapsedRealtime() - startedAt
+                val previewDeltaMs = REMOTE_SEEK_INITIAL_STEP_MS +
+                    (elapsedMs * REMOTE_SEEK_SPEED_MS_PER_SECOND / 1_000L)
+                val targetPosition = (remoteSeekAnchorMs + direction * previewDeltaMs).coerceIn(0L, duration)
+                remoteSeekPreviewMs = targetPosition
+                interactionState.updateSeekPreview(
+                    remoteSeekOverlayState(
+                        targetPositionMs = targetPosition,
+                        anchorPositionMs = remoteSeekAnchorMs,
+                        direction = direction
+                    )
+                )
+                delay(REMOTE_SEEK_PREVIEW_FRAME_MS)
+            }
+        }
+    }
+
+    fun finishRemoteSeek() {
+        val direction = remoteSeekDirection
+        if (direction == 0) return
+
+        remoteSeekJob?.cancel()
+        remoteSeekJob = null
+        remoteSeekDirection = 0
+
+        val targetPosition = remoteSeekPreviewMs.coerceIn(0L, durationMs.coerceAtLeast(0L))
+        interactionState.endGesture(PhoneGestureType.SEEK)
         interactionState.showFeedback(
             PhoneFeedbackOverlay.Seek(
-                SeekOverlayState(
+                remoteSeekOverlayState(
                     targetPositionMs = targetPosition,
-                    durationMs = duration,
-                    deltaMs = targetPosition - currentPositionMs,
-                    reachedEdgeMessage = reachedEdgeMessage
+                    anchorPositionMs = remoteSeekAnchorMs,
+                    direction = direction
                 )
             ),
             keepControlsVisible = false
         )
+        currentPositionMs = targetPosition
+        controlState.seekTo(targetPosition)
     }
 
     BackHandler {
@@ -332,6 +406,8 @@ internal fun FullscreenPlayerContent(
             exitFullscreen()
         }
     }
+
+    KeepScreenOnEffect(enabled = isTv)
 
     DisposableEffect(activity, manageOrientation) {
         if (activity == null) {
@@ -370,24 +446,37 @@ internal fun FullscreenPlayerContent(
     }
 
     LaunchedEffect(videoUrl, episodeIndex) {
+        remoteSeekJob?.cancel()
+        remoteSeekJob = null
+        remoteSeekDirection = 0
         activePanel = null
+        displayedPanel = null
         interactionState.clearForNewMedia(initialPositionMs)
         transientMessage = null
     }
 
-    LaunchedEffect(isTv, interactionState.controlsVisible, activePanel, playbackError) {
-        if (isTv && interactionState.controlsVisible && activePanel == null && playbackError == null) {
-            tvPrimaryActionFocusRequester.requestFocus()
+    LaunchedEffect(isTv, interactionState.controlsVisible, activePanel, displayedPanel, playbackError) {
+        if (
+            isTv &&
+            interactionState.controlsVisible &&
+            activePanel == null &&
+            displayedPanel == null &&
+            playbackError == null
+        ) {
+            delay(32)
+            runCatching {
+                tvPrimaryActionFocusRequester.requestFocus()
+            }
         }
     }
 
-    LaunchedEffect(isTv, activePanel) {
-        if (!isTv) return@LaunchedEffect
-        when (activePanel) {
-            BottomPanel.SPEED -> tvSpeedPanelFocusRequester.requestFocus()
-            BottomPanel.QUALITY -> tvQualityPanelFocusRequester.requestFocus()
-            BottomPanel.EPISODE -> tvEpisodePanelFocusRequester.requestFocus()
-            null -> Unit
+    LaunchedEffect(activePanel) {
+        if (activePanel != null) {
+            displayedPanel = activePanel
+        } else if (displayedPanel != null) {
+            delay(180)
+            displayedPanel = null
+            interactionState.hideControls()
         }
     }
 
@@ -401,8 +490,25 @@ internal fun FullscreenPlayerContent(
                         .focusRequester(tvFocusRequester)
                         .focusable()
                         .onPreviewKeyEvent { event ->
-                            if (event.nativeKeyEvent.action != android.view.KeyEvent.ACTION_DOWN) return@onPreviewKeyEvent false
                             val controlsVisible = interactionState.controlsVisible || activePanel != null
+                            if (event.nativeKeyEvent.action == android.view.KeyEvent.ACTION_UP) {
+                                return@onPreviewKeyEvent when (event.nativeKeyEvent.keyCode) {
+                                    android.view.KeyEvent.KEYCODE_DPAD_LEFT,
+                                    android.view.KeyEvent.KEYCODE_MEDIA_REWIND,
+                                    android.view.KeyEvent.KEYCODE_DPAD_RIGHT,
+                                    android.view.KeyEvent.KEYCODE_MEDIA_FAST_FORWARD -> {
+                                        if (!controlsVisible && remoteSeekDirection != 0) {
+                                            finishRemoteSeek()
+                                            true
+                                        } else {
+                                            false
+                                        }
+                                    }
+
+                                    else -> false
+                                }
+                            }
+                            if (event.nativeKeyEvent.action != android.view.KeyEvent.ACTION_DOWN) return@onPreviewKeyEvent false
                             when (event.nativeKeyEvent.keyCode) {
                                 android.view.KeyEvent.KEYCODE_DPAD_CENTER,
                                 android.view.KeyEvent.KEYCODE_ENTER,
@@ -423,7 +529,7 @@ internal fun FullscreenPlayerContent(
                                     if (controlsVisible) {
                                         false
                                     } else {
-                                        seekByRemote(-10_000L)
+                                        startRemoteSeek(-1)
                                         true
                                     }
                                 }
@@ -433,7 +539,7 @@ internal fun FullscreenPlayerContent(
                                     if (controlsVisible) {
                                         false
                                     } else {
-                                        seekByRemote(10_000L)
+                                        startRemoteSeek(1)
                                         true
                                     }
                                 }
@@ -563,13 +669,16 @@ internal fun FullscreenPlayerContent(
             }
         }
 
-        if (interactionState.controlsVisible) {
+        if (interactionState.controlsVisible || activePanel != null || displayedPanel != null) {
             val topBarHeight = if (isTv) 64.dp else 48.dp
-            val progressBarHeight = if (isTv) 72.dp else 42.dp
-            val bottomBarHeight = if (isTv) 80.dp else 52.dp
-            val edgePadding = if (isTv) 28.dp else 16.dp
+            val progressBarHeight = if (isTv) 52.dp else 42.dp
+            val bottomBarHeight = if (isTv) 44.dp else 52.dp
+            val edgePadding = if (isTv) 10.dp else 16.dp
+            val focusSafeInset = if (isTv) 6.dp else 0.dp
+            val panel = activePanel
 
-            Column(
+            if (panel == null && displayedPanel == null) {
+                Column(
                 modifier = Modifier
                     .align(Alignment.TopStart)
                     .fillMaxWidth()
@@ -618,48 +727,17 @@ internal fun FullscreenPlayerContent(
                             colors = listOf(Color.Transparent, Color(0xB0060D16), Color(0xF2060D16))
                         )
                     )
-                    .padding(horizontal = edgePadding, vertical = if (isTv) 12.dp else 10.dp)
-            ) {
-                val panel = activePanel
-                if (panel != null) {
-                    PlayerOptionPanel(
-                        panel = panel,
-                        isTv = isTv,
-                        playbackSpeed = playbackSpeed,
-                        selectedQuality = selectedQuality,
-                        episodeIndex = episodeIndex,
-                        episodeCount = episodeCount,
-                        speedOptions = speedOptions,
-                        qualityOptions = qualityOptions,
-                        speedFocusRequester = tvSpeedPanelFocusRequester,
-                        qualityFocusRequester = tvQualityPanelFocusRequester,
-                        episodeFocusRequester = tvEpisodePanelFocusRequester,
-                        onClose = ::closePanel,
-                        onSpeedSelected = { speed ->
-                            playbackSpeed = speed
-                            controlState.setSpeed(speed)
-                            showTransientMessage("倍速 ${formatPlaybackSpeed(speed)}")
-                            activePanel = null
-                        },
-                        onQualitySelected = { quality ->
-                            selectedQuality = quality
-                            showTransientMessage("清晰度 $quality")
-                            activePanel = null
-                        },
-                        onEpisodeSelected = { targetIndex ->
-                            if (targetIndex != episodeIndex) {
-                                switchEpisode(targetIndex)
-                            } else {
-                                closePanel()
-                            }
-                        }
+                    .padding(
+                        start = edgePadding,
+                        top = if (isTv) 2.dp else 10.dp,
+                        end = edgePadding,
+                        bottom = if (isTv) 12.dp else 16.dp
                     )
-                    Spacer(modifier = Modifier.height(12.dp))
-                }
-
+            ) {
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
+                        .padding(horizontal = focusSafeInset)
                         .height(progressBarHeight),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
@@ -745,9 +823,9 @@ internal fun FullscreenPlayerContent(
                     modifier = Modifier
                         .fillMaxWidth()
                         .horizontalScroll(rememberScrollState())
-                        .padding(start = if (isTv) 10.dp else 0.dp, end = if (isTv) 8.dp else 0.dp)
+                        .padding(horizontal = focusSafeInset)
                         .height(bottomBarHeight),
-                    horizontalArrangement = Arrangement.spacedBy(if (isTv) 12.dp else 8.dp),
+                    horizontalArrangement = Arrangement.spacedBy(if (isTv) 10.dp else 8.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     if (episodeCount > 1) {
@@ -796,6 +874,75 @@ internal fun FullscreenPlayerContent(
                         text = if (isTv) "选集 第${episodeIndex + 1}集" else "选集 C-${episodeIndex + 1}",
                         large = isTv,
                         onClick = { togglePanel(BottomPanel.EPISODE) }
+                    )
+                }
+            }
+
+            }
+
+            AnimatedVisibility(
+                visible = panel != null,
+                enter = slideInVertically(animationSpec = tween(220)) { it / 2 } + fadeIn(animationSpec = tween(160)),
+                exit = slideOutVertically(animationSpec = tween(180)) { it / 2 } + fadeOut(animationSpec = tween(120)),
+                modifier = Modifier
+                    .align(Alignment.BottomStart)
+                    .fillMaxWidth()
+                    .onPreviewKeyEvent { event ->
+                        if (!isTv) return@onPreviewKeyEvent false
+                        if (event.nativeKeyEvent.action != android.view.KeyEvent.ACTION_DOWN) {
+                            return@onPreviewKeyEvent false
+                        }
+                        when (event.nativeKeyEvent.keyCode) {
+                            android.view.KeyEvent.KEYCODE_BACK,
+                            android.view.KeyEvent.KEYCODE_ESCAPE -> {
+                                closePanel()
+                                true
+                            }
+
+                            else -> {
+                                refreshTvMenuInteraction()
+                                false
+                            }
+                        }
+                    }
+                    .padding(
+                        start = edgePadding,
+                        end = edgePadding,
+                        bottom = if (isTv) 24.dp else 16.dp
+                    )
+            ) {
+                displayedPanel?.let { shownPanel ->
+                    PlayerOptionPanel(
+                        panel = shownPanel,
+                        isTv = isTv,
+                        playbackSpeed = playbackSpeed,
+                        selectedQuality = selectedQuality,
+                        episodeIndex = episodeIndex,
+                        episodeCount = episodeCount,
+                        speedOptions = speedOptions,
+                        qualityOptions = qualityOptions,
+                        speedFocusRequester = tvSpeedPanelFocusRequester,
+                        qualityFocusRequester = tvQualityPanelFocusRequester,
+                        episodeFocusRequester = tvEpisodePanelFocusRequester,
+                        onClose = ::closePanel,
+                        onSpeedSelected = { speed ->
+                            playbackSpeed = speed
+                            controlState.setSpeed(speed)
+                            showTransientMessage("倍速 ${formatPlaybackSpeed(speed)}")
+                            closePanel()
+                        },
+                        onQualitySelected = { quality ->
+                            selectedQuality = quality
+                            showTransientMessage("清晰度 $quality")
+                            closePanel()
+                        },
+                        onEpisodeSelected = { targetIndex ->
+                            if (targetIndex != episodeIndex) {
+                                switchEpisode(targetIndex)
+                            } else {
+                                closePanel()
+                            }
+                        }
                     )
                 }
             }
@@ -863,12 +1010,30 @@ private fun PlayerOptionPanel(
     onQualitySelected: (String) -> Unit,
     onEpisodeSelected: (Int) -> Unit
 ) {
+    LaunchedEffect(isTv, panel, playbackSpeed, selectedQuality, episodeIndex) {
+        if (!isTv) return@LaunchedEffect
+        delay(32)
+        runCatching {
+            when (panel) {
+                BottomPanel.SPEED -> speedFocusRequester.requestFocus()
+                BottomPanel.QUALITY -> qualityFocusRequester.requestFocus()
+                BottomPanel.EPISODE -> episodeFocusRequester.requestFocus()
+            }
+        }
+    }
+
     Column(
         modifier = Modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(12.dp))
-            .background(Color(0xEE060D16))
-            .border(BorderStroke(1.dp, Color.White.copy(alpha = 0.10f)), RoundedCornerShape(12.dp))
+            .background(
+                Brush.verticalGradient(
+                    listOf(
+                        AppSurfaceVariant.copy(alpha = 0.72f),
+                        Color(0xB00B1727)
+                    )
+                )
+            )
             .padding(horizontal = 16.dp, vertical = 14.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
@@ -928,27 +1093,36 @@ private fun PlayerOptionPanel(
             }
 
             BottomPanel.EPISODE -> {
-                FlowRow(
-                    horizontalArrangement = Arrangement.spacedBy(10.dp),
-                    verticalArrangement = Arrangement.spacedBy(10.dp)
+                val episodeScrollState = rememberScrollState()
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .heightIn(max = if (isTv) 244.dp else 204.dp)
+                        .verticalScroll(episodeScrollState)
                 ) {
-                    repeat(episodeCount) { index ->
-                        val focusModifier = if (isTv && index == episodeIndex) {
-                            Modifier.focusRequester(episodeFocusRequester)
-                        } else {
-                            Modifier
+                    FlowRow(
+                        modifier = Modifier.padding(start = 6.dp, top = 6.dp, end = 6.dp, bottom = 8.dp),
+                        horizontalArrangement = Arrangement.spacedBy(10.dp),
+                        verticalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        repeat(episodeCount) { index ->
+                            val focusModifier = if (isTv && index == episodeIndex) {
+                                Modifier.focusRequester(episodeFocusRequester)
+                            } else {
+                                Modifier
+                            }
+                            PlayerPanelChip(
+                                modifier = Modifier
+                                    .width(if (isTv) 108.dp else 78.dp)
+                                    .height(if (isTv) 48.dp else 38.dp)
+                                    .then(focusModifier),
+                                text = "第${index + 1}集",
+                                selected = index == episodeIndex,
+                                large = isTv,
+                                fillContainer = true,
+                                onClick = { onEpisodeSelected(index) }
+                            )
                         }
-                        PlayerPanelChip(
-                            modifier = Modifier
-                                .width(if (isTv) 108.dp else 78.dp)
-                                .height(if (isTv) 48.dp else 38.dp)
-                                .then(focusModifier),
-                            text = "第${index + 1}集",
-                            selected = index == episodeIndex,
-                            large = isTv,
-                            fillContainer = true,
-                            onClick = { onEpisodeSelected(index) }
-                        )
                     }
                 }
             }
@@ -1048,13 +1222,13 @@ private fun PlayerActionChip(
                 .clip(RoundedCornerShape(8.dp))
                 .background(background)
                 .border(BorderStroke(1.dp, borderColor), RoundedCornerShape(8.dp))
-                .padding(horizontal = if (large) 18.dp else 12.dp, vertical = if (large) 14.dp else 9.dp),
+                .padding(horizontal = if (large) 14.dp else 12.dp, vertical = if (large) 9.dp else 9.dp),
             contentAlignment = Alignment.Center
         ) {
             Text(
                 text = text,
                 color = if (enabled) Color(0xFFE7ECF3) else AppTextPrimary.copy(alpha = 0.35f),
-                fontSize = if (large) 16.sp else 12.sp,
+                fontSize = if (large) 14.sp else 12.sp,
                 maxLines = 1
             )
         }
@@ -1064,6 +1238,10 @@ private fun PlayerActionChip(
 private enum class PlayerIcon {
     Back
 }
+
+private const val REMOTE_SEEK_INITIAL_STEP_MS = 10_000L
+private const val REMOTE_SEEK_SPEED_MS_PER_SECOND = 18_000L
+private const val REMOTE_SEEK_PREVIEW_FRAME_MS = 50L
 
 @Composable
 private fun IconOnlyButton(

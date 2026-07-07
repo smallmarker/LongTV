@@ -21,6 +21,7 @@ import androidx.tv.material3.Text
 import com.loong.longtv.engine.source.model.VodInfo
 import com.loong.longtv.ui.common.DeviceClass
 import com.loong.longtv.ui.common.currentDeviceClass
+import com.loong.longtv.ui.shared.VideoPosterAspectRatio
 import com.loong.longtv.ui.shared.widgets.SmartAsyncImage
 import com.loong.longtv.ui.theme.AppThemeTokens
 import com.loong.longtv.ui.theme.BrandPrimary
@@ -36,7 +37,7 @@ fun VideoCard(video: VodInfo) {
     Box(
         modifier = Modifier
             .fillMaxWidth()
-            .aspectRatio(if (isTv) 16f / 9f else 2f / 3f)
+            .aspectRatio(VideoPosterAspectRatio)
             .clip(shape)
             .background(MaterialTheme.colorScheme.surface)
     ) {

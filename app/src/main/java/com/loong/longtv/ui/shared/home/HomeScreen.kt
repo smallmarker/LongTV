@@ -1,5 +1,11 @@
 package com.loong.longtv.ui.shared.home
 
+import android.app.Activity
+import android.content.Context
+import android.content.ContextWrapper
+import android.os.SystemClock
+import android.widget.Toast
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -24,11 +30,21 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableLongStateOf
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -50,6 +66,7 @@ import com.loong.longtv.ui.theme.AppTextMuted
 import com.loong.longtv.ui.theme.AppTextPrimary
 import com.loong.longtv.ui.theme.AppThemeTokens
 import com.loong.longtv.ui.theme.BrandPrimary
+import com.loong.longtv.utils.extensions.prefetchSmartImages
 
 @OptIn(ExperimentalTvMaterial3Api::class)
 @Composable
@@ -59,6 +76,30 @@ internal fun HomeScreenContent(
     isTv: Boolean,
     onRetry: () -> Unit,
 ) {
+    val context = LocalContext.current
+    val searchFocusRequester = remember { FocusRequester() }
+    var searchFocused by remember { mutableStateOf(false) }
+    var lastExitBackMs by remember { mutableLongStateOf(0L) }
+
+    LaunchedEffect(isTv) {
+        if (isTv) searchFocusRequester.requestFocus()
+    }
+
+    BackHandler(enabled = isTv) {
+        if (!searchFocused) {
+            searchFocusRequester.requestFocus()
+            lastExitBackMs = 0L
+        } else {
+            val now = SystemClock.elapsedRealtime()
+            if (now - lastExitBackMs <= HOME_EXIT_BACK_INTERVAL_MS) {
+                context.findActivity()?.finish()
+            } else {
+                lastExitBackMs = now
+                Toast.makeText(context, "再按一次返回退出 LongTV", Toast.LENGTH_SHORT).show()
+            }
+        }
+    }
+
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -69,7 +110,9 @@ internal fun HomeScreenContent(
         MinimalHomeHeader(
             isTv = isTv,
             onSearch = { navController.navigate(Screen.Search.route) },
-            onSettings = { navController.navigate(Screen.Settings.route) }
+            onSettings = { navController.navigate(Screen.Settings.route) },
+            searchFocusRequester = searchFocusRequester,
+            onSearchFocusChanged = { searchFocused = it }
         )
 
         if (uiState.errorMessage != null) {
@@ -123,6 +166,8 @@ private fun MinimalHomeHeader(
     isTv: Boolean,
     onSearch: () -> Unit,
     onSettings: () -> Unit,
+    searchFocusRequester: FocusRequester,
+    onSearchFocusChanged: (Boolean) -> Unit,
 ) {
     Column(verticalArrangement = Arrangement.spacedBy(if (isTv) AppThemeTokens.TvSectionGap else AppThemeTokens.PhoneSectionGap)) {
         Row(
@@ -163,7 +208,10 @@ private fun MinimalHomeHeader(
                         HeaderSearchField(
                             isTv = true,
                             onSearch = onSearch,
-                            modifier = Modifier.width(360.dp)
+                            modifier = Modifier
+                                .width(360.dp)
+                                .focusRequester(searchFocusRequester)
+                                .onFocusChanged { onSearchFocusChanged(it.isFocused) }
                         )
                         Text(
                             text = "支持遥控器语音键输入",
@@ -177,18 +225,44 @@ private fun MinimalHomeHeader(
                 }
             }
 
-            Box(
-                modifier = Modifier
-                    .size(if (isTv) 46.dp else 38.dp)
-                    .clickable(onClick = onSettings),
-                contentAlignment = Alignment.Center
-            ) {
-                Icon(
-                    imageVector = Icons.Default.Settings,
-                    contentDescription = "设置",
-                    tint = AppTextPrimary,
-                    modifier = Modifier.size(if (isTv) 23.dp else 20.dp)
-                )
+            if (isTv) {
+                Box(
+                    modifier = Modifier
+                        .size(54.dp)
+                        .padding(4.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    TvSurface(
+                        onClick = onSettings,
+                        modifier = Modifier.fillMaxSize()
+                    ) {
+                        Box(
+                            modifier = Modifier.fillMaxSize(),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Settings,
+                                contentDescription = "设置",
+                                tint = AppTextPrimary,
+                                modifier = Modifier.size(23.dp)
+                            )
+                        }
+                    }
+                }
+            } else {
+                Box(
+                    modifier = Modifier
+                        .size(38.dp)
+                        .clickable(onClick = onSettings),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Settings,
+                        contentDescription = "设置",
+                        tint = AppTextPrimary,
+                        modifier = Modifier.size(20.dp)
+                    )
+                }
             }
         }
 
@@ -246,6 +320,15 @@ private fun PopularRailSection(
     onMore: () -> Unit,
     onItemClick: (VodInfo) -> Unit,
 ) {
+    val context = LocalContext.current
+    LaunchedEffect(items) {
+        prefetchSmartImages(
+            context = context,
+            models = items.map { it.pic },
+            limit = if (isTv) 16 else 10
+        )
+    }
+
     Column {
         HomeSectionHeader(
             title = "热门影视",
@@ -264,7 +347,7 @@ private fun PopularRailSection(
                 .fillMaxWidth()
                 .padding(top = 12.dp),
             horizontalArrangement = Arrangement.spacedBy(if (isTv) 18.dp else 12.dp),
-            contentPadding = PaddingValues(horizontal = 2.dp)
+            contentPadding = PaddingValues(horizontal = if (isTv) 12.dp else 2.dp, vertical = if (isTv) 6.dp else 0.dp)
         ) {
             items(items, key = { "${it.siteKey}:${it.id}:${it.name}" }) { video ->
                 TvSurface(onClick = { onItemClick(video) }) {
@@ -287,6 +370,15 @@ private fun MediaRailSection(
     onMore: () -> Unit,
     onItemClick: (HomeMediaItem) -> Unit,
 ) {
+    val context = LocalContext.current
+    LaunchedEffect(items) {
+        prefetchSmartImages(
+            context = context,
+            models = items.map { it.cover },
+            limit = if (isTv) 16 else 10
+        )
+    }
+
     Column {
         HomeSectionHeader(
             title = title,
@@ -305,7 +397,7 @@ private fun MediaRailSection(
                 .fillMaxWidth()
                 .padding(top = 12.dp),
             horizontalArrangement = Arrangement.spacedBy(if (isTv) 18.dp else 12.dp),
-            contentPadding = PaddingValues(horizontal = 2.dp)
+            contentPadding = PaddingValues(horizontal = if (isTv) 12.dp else 2.dp, vertical = if (isTv) 6.dp else 0.dp)
         ) {
             items(items, key = { "${it.siteKey}:${it.videoId}:${it.title}" }) { item ->
                 TvSurface(onClick = { onItemClick(item) }) {
@@ -404,4 +496,12 @@ private fun HomeMediaItem.toVodInfo(): VodInfo {
         pic = cover,
         remarks = meta
     ).also { it.siteKey = siteKey }
+}
+
+private const val HOME_EXIT_BACK_INTERVAL_MS = 2_000L
+
+private tailrec fun Context.findActivity(): Activity? = when (this) {
+    is Activity -> this
+    is ContextWrapper -> baseContext.findActivity()
+    else -> null
 }

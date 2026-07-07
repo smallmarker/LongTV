@@ -10,7 +10,9 @@ import androidx.annotation.OptIn
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.viewinterop.AndroidView
@@ -19,14 +21,19 @@ import androidx.media3.common.MediaItem
 import androidx.media3.common.PlaybackException
 import androidx.media3.common.Player
 import androidx.media3.common.util.UnstableApi
+import androidx.media3.database.StandaloneDatabaseProvider
 import androidx.media3.datasource.DefaultDataSource
 import androidx.media3.datasource.DefaultHttpDataSource
+import androidx.media3.datasource.cache.CacheDataSource
+import androidx.media3.datasource.cache.LeastRecentlyUsedCacheEvictor
+import androidx.media3.datasource.cache.SimpleCache
 import androidx.media3.exoplayer.DefaultLoadControl
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
 import androidx.media3.ui.AspectRatioFrameLayout
 import androidx.media3.ui.PlayerView
 import androidx.media3.ui.PlayerView.ControllerVisibilityListener
+import java.io.File
 import kotlin.math.abs
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.MainScope
@@ -58,6 +65,12 @@ fun ComposeVideoPlayer(
     onSurfaceTap: (() -> Unit)? = null,
 ) {
     val context = LocalContext.current
+    val latestOnProgressChanged by rememberUpdatedState(onProgressChanged)
+    val latestOnControllerVisibilityChanged by rememberUpdatedState(onControllerVisibilityChanged)
+    val latestOnPlaybackStateChanged by rememberUpdatedState(onPlaybackStateChanged)
+    val latestOnPlayingChanged by rememberUpdatedState(onPlayingChanged)
+    val latestOnPlaybackEnded by rememberUpdatedState(onPlaybackEnded)
+    val latestOnPlaybackError by rememberUpdatedState(onPlaybackError)
     val currentResizeMode = controlState?.resizeMode ?: resizeMode
     val useNativeController = enableNativeController && (showController || touchControllerEnabled)
     val player = remember(videoUrl, requestHeaders, sharedSessionEnabled) {
@@ -87,7 +100,7 @@ fun ComposeVideoPlayer(
             player.playWhenReady = autoPlay
         } catch (error: Throwable) {
             Log.e("ComposeVideoPlayer", "prepare player failed for url=$videoUrl", error)
-            onPlaybackError?.invoke(error.message ?: "播放失败")
+            latestOnPlaybackError?.invoke(error.message ?: "播放失败")
         }
     }
 
@@ -123,27 +136,27 @@ fun ComposeVideoPlayer(
         }
     }
 
-    DisposableEffect(player, onPlaybackError, onPlaybackStateChanged, onPlayingChanged, onPlaybackEnded) {
+    DisposableEffect(player) {
         val listener = object : Player.Listener {
             override fun onPlaybackStateChanged(playbackState: Int) {
-                onPlaybackStateChanged?.invoke(playbackState)
+                latestOnPlaybackStateChanged?.invoke(playbackState)
                 if (playbackState == Player.STATE_ENDED) {
-                    onPlaybackEnded?.invoke()
+                    latestOnPlaybackEnded?.invoke()
                 }
             }
 
             override fun onIsPlayingChanged(isPlaying: Boolean) {
-                onPlayingChanged?.invoke(isPlaying)
+                latestOnPlayingChanged?.invoke(isPlaying)
             }
 
             override fun onPlayerError(error: PlaybackException) {
                 Log.e("ComposeVideoPlayer", "player error for url=$videoUrl", error)
-                onPlaybackError?.invoke(error.message ?: "播放失败")
+                latestOnPlaybackError?.invoke(error.message ?: "播放失败")
             }
         }
         player.addListener(listener)
-        onPlaybackStateChanged?.invoke(player.playbackState)
-        onPlayingChanged?.invoke(player.isPlaying)
+        latestOnPlaybackStateChanged?.invoke(player.playbackState)
+        latestOnPlayingChanged?.invoke(player.isPlaying)
         onDispose {
             player.removeListener(listener)
         }
@@ -158,14 +171,16 @@ fun ComposeVideoPlayer(
         while (true) {
             delay(1_000)
             if (player.currentMediaItem != null) {
-                onProgressChanged(player.currentPosition, player.duration.coerceAtLeast(0))
+                latestOnProgressChanged(player.currentPosition, player.duration.coerceAtLeast(0))
             }
         }
     }
 
     DisposableEffect(videoUrl, requestHeaders) {
         onDispose {
-            onProgressChanged(player.currentPosition, player.duration.coerceAtLeast(0))
+            if (player.currentMediaItem != null) {
+                latestOnProgressChanged(player.currentPosition, player.duration.coerceAtLeast(0))
+            }
         }
     }
 
@@ -198,7 +213,7 @@ fun ComposeVideoPlayer(
                 setSurfaceTapListener(onSurfaceTap)
                 setControllerVisibilityListener(
                     ControllerVisibilityListener { visibility ->
-                        onControllerVisibilityChanged?.invoke(visibility == View.VISIBLE)
+                        latestOnControllerVisibilityChanged?.invoke(visibility == View.VISIBLE)
                     }
                 )
             }
@@ -218,7 +233,7 @@ fun ComposeVideoPlayer(
             playerView.setSurfaceTapListener(onSurfaceTap)
             playerView.setControllerVisibilityListener(
                 ControllerVisibilityListener { visibility ->
-                    onControllerVisibilityChanged?.invoke(visibility == View.VISIBLE)
+                    latestOnControllerVisibilityChanged?.invoke(visibility == View.VISIBLE)
                 }
             )
         }
@@ -290,18 +305,58 @@ private fun createExoPlayer(
     repeat: Boolean
 ): ExoPlayer {
     val httpFactory = DefaultHttpDataSource.Factory()
+        .setUserAgent(DEFAULT_VIDEO_USER_AGENT)
+        .setConnectTimeoutMs(10_000)
+        .setReadTimeoutMs(15_000)
         .setAllowCrossProtocolRedirects(true)
         .setDefaultRequestProperties(requestHeaders)
-    val dataSourceFactory = DefaultDataSource.Factory(context, httpFactory)
+    val upstreamFactory = DefaultDataSource.Factory(context, httpFactory)
+    val dataSourceFactory = CacheDataSource.Factory()
+        .setCache(VideoPlayerCache.get(context))
+        .setUpstreamDataSourceFactory(upstreamFactory)
+        .setFlags(CacheDataSource.FLAG_IGNORE_CACHE_ON_ERROR)
 
     return ExoPlayer.Builder(context)
         .setMediaSourceFactory(DefaultMediaSourceFactory(dataSourceFactory))
-        .setLoadControl(DefaultLoadControl())
+        .setLoadControl(createStreamingLoadControl())
         .build()
         .apply {
             repeatMode = if (repeat) Player.REPEAT_MODE_ONE else Player.REPEAT_MODE_OFF
         }
 }
+
+private fun createStreamingLoadControl(): DefaultLoadControl {
+    return DefaultLoadControl.Builder()
+        .setBufferDurationsMs(
+            15_000,
+            50_000,
+            1_500,
+            3_000
+        )
+        .setPrioritizeTimeOverSizeThresholds(true)
+        .build()
+}
+
+@OptIn(UnstableApi::class)
+private object VideoPlayerCache {
+    private const val MAX_CACHE_BYTES = 768L * 1024L * 1024L
+    private var cache: SimpleCache? = null
+
+    @Synchronized
+    fun get(context: Context): SimpleCache {
+        val existing = cache
+        if (existing != null) return existing
+        return SimpleCache(
+            File(context.applicationContext.cacheDir, "video_media_cache"),
+            LeastRecentlyUsedCacheEvictor(MAX_CACHE_BYTES),
+            StandaloneDatabaseProvider(context.applicationContext)
+        ).also {
+            cache = it
+        }
+    }
+}
+
+private const val DEFAULT_VIDEO_USER_AGENT = "LongTV/1.0 Android VideoPlayer"
 
 private object SharedPlayerSession {
     private val scope = MainScope()

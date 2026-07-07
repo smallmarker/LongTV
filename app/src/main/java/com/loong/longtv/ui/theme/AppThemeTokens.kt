@@ -22,7 +22,7 @@ object AppThemeTokens {
     val TvSearchHeight: Dp = 36.dp
     val PhoneSearchHeight: Dp = 46.dp
 
-    val TvPosterRailWidth: Dp = 220.dp
+    val TvPosterRailWidth: Dp = 150.dp
     val PhonePosterRailWidth: Dp = 150.dp
 
     val SurfaceAlpha: Float = 0.08f
@@ -43,4 +43,9 @@ object AppThemeTokens {
     fun fieldBackground() = Color.White.copy(alpha = SurfaceAlpha)
     fun fieldBorder() = Color.White.copy(alpha = BorderAlpha)
     fun mutedBorder() = Color.White.copy(alpha = MutedBorderAlpha)
+    fun tvFocusContainer() = KeyboardFocused
+    fun tvPressedContainer() = KeyboardPressed
+    fun tvFocusBorder() = TvFocusBorder
+    fun tvFocusBorderSoft() = TvFocusBorderSoft
+    fun tvFocusPressedBorder() = TvFocusPressedBorder
 }

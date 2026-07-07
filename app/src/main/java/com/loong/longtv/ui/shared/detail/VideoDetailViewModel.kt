@@ -249,6 +249,40 @@ class VideoDetailViewModel @Inject constructor(
         saveProgress(positionMs, 0, updateResumeState = true)
     }
 
+    fun applyFullscreenProgress(playLine: PlayLine, episodeIndex: Int, positionMs: Long) {
+        if (positionMs < 0) return
+        val state = _uiState.value
+        val detail = state.detail ?: return
+        val lines = detail.getPlayLines()
+        val sourceIndex = lines.indexOfFirst { it.flag == playLine.flag }
+            .takeIf { it >= 0 } ?: state.selectedSourceIndex
+        val episode = playLine.episodes.getOrNull(episodeIndex) ?: return
+
+        viewModelScope.launch {
+            watchHistoryRepository.save(
+                WatchHistoryEntity(
+                    historyKey = "${state.siteKey}_${detail.id}",
+                    siteKey = state.siteKey,
+                    videoId = detail.id,
+                    title = detail.name,
+                    cover = detail.pic,
+                    sourceName = playLine.flag,
+                    episodeName = episode.name,
+                    episodeUrl = episode.url,
+                    positionMs = positionMs,
+                    durationMs = 0,
+                )
+            )
+            _uiState.update {
+                it.copy(
+                    selectedSourceIndex = sourceIndex,
+                    selectedEpisodeIndex = episodeIndex,
+                    resumePositionMs = positionMs
+                )
+            }
+        }
+    }
+
     fun toggleFavorite() {
         val state = _uiState.value
         val detail = state.detail ?: return

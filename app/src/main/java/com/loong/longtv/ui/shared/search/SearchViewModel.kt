@@ -3,6 +3,7 @@ package com.loong.longtv.ui.shared.search
 import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.google.gson.JsonParser
 import com.loong.longtv.data.SourcePreference
 import com.loong.longtv.data.room.dao.SearchHistoryDao
 import com.loong.longtv.data.room.entity.SearchHistoryEntity
@@ -11,6 +12,8 @@ import com.loong.longtv.engine.TvBoxEngine
 import com.loong.longtv.engine.source.model.SiteConfig
 import com.loong.longtv.engine.source.model.VodInfo
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.async
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -23,7 +26,11 @@ import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.supervisorScope
+import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
+import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
+import okhttp3.OkHttpClient
+import okhttp3.Request
 import javax.inject.Inject
 
 data class TagGroup(
@@ -37,6 +44,7 @@ class SearchViewModel @Inject constructor(
     private val engine: TvBoxEngine,
     private val sourcePreference: SourcePreference,
 ) : ViewModel() {
+    private val client = OkHttpClient()
     private val _hotKeywords = MutableStateFlow<List<String>>(emptyList())
     private val _tvSuggestions = MutableStateFlow<List<String>>(emptyList())
     private val _tvSuggestionKeyword = MutableStateFlow("")
@@ -57,6 +65,7 @@ class SearchViewModel @Inject constructor(
     val searchError = _searchError.asStateFlow()
 
     private var lastSearchKeyword = ""
+    private var suggestionJob: Job? = null
 
     val history = dao.getAll().stateIn(
         scope = viewModelScope,
@@ -94,17 +103,18 @@ class SearchViewModel @Inject constructor(
 
     fun loadTvSuggestions(keyword: String) {
         val trimmed = keyword.trim()
+        suggestionJob?.cancel()
         _tvSuggestionKeyword.value = trimmed
         if (trimmed.isBlank()) {
             _tvSuggestions.value = emptyList()
             _tvSuggestionsLoading.value = false
             return
         }
-        viewModelScope.launch {
+        suggestionJob = viewModelScope.launch {
             delay(180)
             if (_tvSuggestionKeyword.value != trimmed) return@launch
             _tvSuggestionsLoading.value = true
-            val suggestions = fetchCurrentSiteSuggestions(trimmed)
+            val suggestions = fetchTvSuggestions(trimmed)
             if (_tvSuggestionKeyword.value == trimmed) {
                 _tvSuggestions.value = suggestions
                 _tvSuggestionsLoading.value = false
@@ -194,7 +204,7 @@ class SearchViewModel @Inject constructor(
     private fun refreshHotKeywords() {
         viewModelScope.launch {
             ensureConfigStarted()
-            val hot = loadCurrentSiteHotKeywords()
+            val hot = loadCurrentSiteHotKeywords().ifEmpty { loadTencentHotKeywords() }
                 .mapNotNull { it.normalizeKeyword().takeIf(String::isNotBlank) }
                 .distinct()
                 .take(MAX_HOT_KEYWORDS)
@@ -231,6 +241,95 @@ class SearchViewModel @Inject constructor(
         }.orEmpty()
     }
 
+    private suspend fun loadTencentHotKeywords(): List<String> = withContext(Dispatchers.IO) {
+        withTimeoutOrNull(TENCENT_HOT_TIMEOUT_MS) {
+            runCatching {
+                val url = requireNotNull("https://node.video.qq.com/x/api/hot_search".toHttpUrlOrNull())
+                    .newBuilder()
+                    .addQueryParameter("channdlId", "0")
+                    .addQueryParameter("_", System.currentTimeMillis().toString())
+                    .build()
+                val request = Request.Builder()
+                    .url(url)
+                    .get()
+                    .header("User-Agent", USER_AGENT)
+                    .build()
+                client.newCall(request).execute().use { response ->
+                    if (!response.isSuccessful) return@use emptyList()
+                    val body = response.body?.string().orEmpty()
+                    JsonParser.parseString(body)
+                        .asJsonObject
+                        .getAsJsonObject("data")
+                        .getAsJsonObject("mapResult")
+                        .getAsJsonObject("0")
+                        .getAsJsonArray("listInfo")
+                        .mapNotNull { element ->
+                            element.asJsonObject
+                                .get("title")
+                                ?.asString
+                                ?.normalizeKeyword()
+                                ?.takeIf(String::isNotBlank)
+                        }
+                        .distinct()
+                        .take(MAX_HOT_KEYWORDS)
+                }
+            }.onFailure {
+                Log.w(TAG, "load tencent hot keywords failed", it)
+            }.getOrDefault(emptyList())
+        }.orEmpty()
+    }
+
+    private suspend fun fetchTvSuggestions(keyword: String): List<String> {
+        val tencentSuggestions = fetchTencentSuggestions(keyword)
+        if (tencentSuggestions.isNotEmpty()) return tencentSuggestions
+        return fetchCurrentSiteSuggestions(keyword)
+    }
+
+    private suspend fun fetchTencentSuggestions(keyword: String): List<String> = withContext(Dispatchers.IO) {
+        withTimeoutOrNull(TENCENT_SUGGESTION_TIMEOUT_MS) {
+            runCatching {
+                val url = requireNotNull(TENCENT_SMART_BOX_URL.toHttpUrlOrNull())
+                    .newBuilder()
+                    .addQueryParameter("format", "json")
+                    .addQueryParameter("page_num", "0")
+                    .addQueryParameter("page_size", "50")
+                    .addQueryParameter("key", keyword)
+                    .build()
+                val request = Request.Builder()
+                    .url(url)
+                    .get()
+                    .header("User-Agent", USER_AGENT)
+                    .build()
+                client.newCall(request).execute().use { response ->
+                    if (!response.isSuccessful) return@use emptyList()
+                    val body = response.body?.string().orEmpty()
+                    JsonParser.parseString(body)
+                        .asJsonObject
+                        .getAsJsonObject("data")
+                        .getAsJsonObject("search_data")
+                        .getAsJsonArray("vecGroupData")
+                        .firstOrNull()
+                        ?.asJsonObject
+                        ?.getAsJsonArray("group_data")
+                        ?.mapNotNull { element ->
+                            element.asJsonObject
+                                .getAsJsonObject("dtReportInfo")
+                                ?.getAsJsonObject("reportData")
+                                ?.get("keyword_txt")
+                                ?.asString
+                                ?.normalizeKeyword()
+                                ?.takeIf(String::isNotBlank)
+                        }
+                        ?.distinct()
+                        ?.take(MAX_SUGGESTIONS)
+                        .orEmpty()
+                }
+            }.onFailure {
+                Log.w(TAG, "load tencent tv suggestions failed", it)
+            }.getOrDefault(emptyList())
+        }.orEmpty()
+    }
+
     private suspend fun fetchCurrentSiteSuggestions(keyword: String): List<String> {
         ensureConfigStarted()
         val site = currentSearchSite() ?: return emptyList()
@@ -264,7 +363,12 @@ class SearchViewModel @Inject constructor(
         private const val MAX_HOT_KEYWORDS = 16
         private const val SPIDER_HOT_TIMEOUT_MS = 5_000L
         private const val SUGGESTION_TIMEOUT_MS = 4_000L
+        private const val TENCENT_HOT_TIMEOUT_MS = 3_000L
+        private const val TENCENT_SUGGESTION_TIMEOUT_MS = 3_000L
         private const val MAX_SUGGESTIONS = 12
+        private const val TENCENT_SMART_BOX_URL =
+            "https://tv.aiseet.atianqi.com/i-tvbin/qtv_video/search/get_search_smart_box"
+        private const val USER_AGENT = "Mozilla/5.0"
     }
 }
 

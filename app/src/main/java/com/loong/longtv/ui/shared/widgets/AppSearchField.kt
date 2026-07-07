@@ -16,7 +16,6 @@ import androidx.tv.material3.ClickableSurfaceDefaults
 import com.loong.longtv.ui.common.DeviceClass
 import com.loong.longtv.ui.common.currentDeviceClass
 import com.loong.longtv.ui.theme.AppThemeTokens
-import com.loong.longtv.ui.theme.BrandPrimary
 
 @Composable
 fun AppSearchFieldSurface(
@@ -39,12 +38,12 @@ fun AppSearchFieldSurface(
             scale = ClickableSurfaceDefaults.scale(focusedScale = 1f),
             border = ClickableSurfaceDefaults.border(
                 focusedBorder = Border(
-                    border = BorderStroke(2.dp, BrandPrimary.copy(alpha = 0.95f)),
+                    border = BorderStroke(2.dp, AppThemeTokens.tvFocusBorder()),
                     inset = 0.dp,
                     shape = shape
                 ),
                 pressedBorder = Border(
-                    border = BorderStroke(2.dp, BrandPrimary),
+                    border = BorderStroke(2.dp, AppThemeTokens.tvFocusPressedBorder()),
                     inset = 0.dp,
                     shape = shape
                 )

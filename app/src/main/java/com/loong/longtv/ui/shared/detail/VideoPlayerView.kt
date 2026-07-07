@@ -29,10 +29,14 @@ fun VideoPlayerView(
     onPlaybackError: ((String) -> Unit)? = null,
     onSurfaceTap: (() -> Unit)? = null,
 ) {
-    val inputMode = when (currentDeviceClass()) {
+    val deviceClass = currentDeviceClass()
+    val inputMode = when (deviceClass) {
         DeviceClass.PHONE -> PlayerInputMode.Touch
         DeviceClass.TV -> PlayerInputMode.Remote
     }
+
+    KeepScreenOnEffect(enabled = deviceClass == DeviceClass.TV)
+
     UnifiedVideoPlayer(
         modifier = modifier,
         videoUrl = videoUrl,

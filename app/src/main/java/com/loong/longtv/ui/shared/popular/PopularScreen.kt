@@ -1,9 +1,11 @@
 package com.loong.longtv.ui.shared.popular
 
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
@@ -25,11 +27,21 @@ import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -58,7 +70,10 @@ import com.loong.longtv.ui.theme.AppSurface
 import com.loong.longtv.ui.theme.AppTextMuted
 import com.loong.longtv.ui.theme.AppTextPrimary
 import com.loong.longtv.ui.theme.BrandPrimary
+import com.loong.longtv.utils.extensions.prefetchSmartImages
+import kotlin.math.floor
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalTvMaterial3Api::class)
 @Composable
@@ -114,6 +129,14 @@ private fun PopularContentSection(
     onFilterSelected: (String, String) -> Unit,
     navController: NavController
 ) {
+    val selectedTabFocusRequester = remember { FocusRequester() }
+    var gridFocused by remember { mutableStateOf(false) }
+
+    BackHandler(enabled = isTv && gridFocused) {
+        selectedTabFocusRequester.requestFocus()
+        gridFocused = false
+    }
+
     Column(modifier = Modifier.fillMaxSize()) {
         if (tabs.isNotEmpty()) {
             PopularTabsRow(
@@ -121,6 +144,7 @@ private fun PopularContentSection(
                 filters = filters,
                 filterPanelVisible = filterPanelVisible,
                 selectedIndex = selectedTabIndex,
+                selectedFocusRequester = selectedTabFocusRequester,
                 onFocusSelect = onTabFocused,
                 onSelect = onTabSelected
             )
@@ -136,6 +160,11 @@ private fun PopularContentSection(
                 selectedTab = tabs.getOrNull(selectedTabIndex),
                 currentSiteKey = currentSite?.key.orEmpty(),
                 isTv = isTv,
+                onGridFocusChanged = { gridFocused = it },
+                onBackFromGrid = {
+                    selectedTabFocusRequester.requestFocus()
+                    gridFocused = false
+                },
                 onRetry = onRetry,
                 navController = navController
             )
@@ -159,6 +188,7 @@ private fun PopularTabsRow(
     filters: Map<String, List<Filter>>,
     filterPanelVisible: Boolean,
     selectedIndex: Int,
+    selectedFocusRequester: FocusRequester,
     onFocusSelect: ((Int) -> Unit)?,
     onSelect: (Int) -> Unit,
 ) {
@@ -170,17 +200,22 @@ private fun PopularTabsRow(
         modifier = Modifier
             .fillMaxWidth()
             .height(42.dp),
-        contentPadding = PaddingValues(horizontal = 2.dp),
+        contentPadding = PaddingValues(horizontal = if (isTv) 10.dp else 2.dp),
         horizontalArrangement = Arrangement.spacedBy(6.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
         itemsIndexed(tabs) { index, tab ->
             val hasFilters = filters[tab.id].orEmpty().isNotEmpty()
+            val tabModifier = Modifier.onFocusChanged {
+                if (isTv && it.isFocused && index != selectedIndex) onFocusSelect?.invoke(index)
+            }
             TvSurface(
                 onClick = { onSelect(index) },
                 shape = ClickableSurfaceDefaults.shape(RoundedCornerShape(8.dp)),
-                modifier = Modifier.onFocusChanged {
-                    if (isTv && it.isFocused && index != selectedIndex) onFocusSelect?.invoke(index)
+                modifier = if (index == selectedIndex) {
+                    tabModifier.focusRequester(selectedFocusRequester)
+                } else {
+                    tabModifier
                 }
             ) {
                 Row(
@@ -219,13 +254,26 @@ private fun PopularVideoGrid(
     selectedTab: Category?,
     currentSiteKey: String,
     isTv: Boolean,
+    onGridFocusChanged: (Boolean) -> Unit,
+    onBackFromGrid: () -> Unit,
     onRetry: () -> Unit,
     navController: NavController
 ) {
     val pagingItems = pagingFlow.collectAsLazyPagingItems()
     val gridState = rememberLazyGridState()
+    val coroutineScope = rememberCoroutineScope()
+    val context = LocalContext.current
     val refreshState = pagingItems.loadState.refresh
     val appendState = pagingItems.loadState.append
+    var focusedIndex by remember { mutableStateOf(-1) }
+
+    LaunchedEffect(pagingItems.itemCount) {
+        prefetchSmartImages(
+            context = context,
+            models = pagingItems.itemSnapshotList.items.map { it.pic },
+            limit = if (isTv) 36 else 18
+        )
+    }
 
     LaunchedEffect(selectedTab?.id) {
         if (pagingItems.itemCount > 0) gridState.animateScrollToItem(0)
@@ -249,41 +297,96 @@ private fun PopularVideoGrid(
         return
     }
 
-    LazyVerticalGrid(
-        state = gridState,
-        columns = if (isTv) GridCells.Adaptive(minSize = 210.dp) else GridCells.Fixed(2),
-        modifier = Modifier.fillMaxHeight(),
-        contentPadding = PaddingValues(bottom = if (isTv) 20.dp else 28.dp),
-        verticalArrangement = Arrangement.spacedBy(if (isTv) 16.dp else 12.dp),
-        horizontalArrangement = Arrangement.spacedBy(if (isTv) 16.dp else 12.dp)
-    ) {
-        items(
-            count = pagingItems.itemCount,
-            key = pagingItems.itemKey { video -> video.id.ifBlank { "${video.typeId}-${video.name}" } }
-        ) { index ->
-            val video = pagingItems[index] ?: return@items
-            TvSurface(
-                onClick = {
-                    navController.navigate(
-                        Screen.VideoDetail.createRoute(video.siteKey.ifBlank { currentSiteKey }, video.id)
-                    )
-                }
-            ) {
-                VideoCard(video = video)
+    BoxWithConstraints(modifier = Modifier.fillMaxHeight()) {
+        val density = LocalDensity.current
+        val tvGridColumns = if (isTv) {
+            with(density) {
+                val availableWidth = (maxWidth - 20.dp).toPx()
+                val minCellWidth = 150.dp.toPx()
+                val spacing = 14.dp.toPx()
+                floor((availableWidth + spacing) / (minCellWidth + spacing)).toInt().coerceAtLeast(1)
             }
+        } else {
+            2
         }
 
-        if (appendState is LoadState.Loading) {
-            item(span = { GridItemSpan(maxLineSpan) }) {
-                Text("正在加载更多...", color = AppTextMuted, fontSize = 13.sp, modifier = Modifier.padding(vertical = 8.dp))
+        LazyVerticalGrid(
+            state = gridState,
+            columns = if (isTv) GridCells.Adaptive(minSize = 150.dp) else GridCells.Fixed(2),
+            modifier = Modifier
+                .fillMaxHeight()
+                .then(
+                    if (isTv) {
+                        Modifier.onPreviewKeyEvent { event ->
+                            if (event.nativeKeyEvent.action != android.view.KeyEvent.ACTION_DOWN) {
+                                return@onPreviewKeyEvent false
+                            }
+                            when (event.nativeKeyEvent.keyCode) {
+                                android.view.KeyEvent.KEYCODE_DPAD_UP -> {
+                                    if (focusedIndex in 0 until tvGridColumns) {
+                                        onBackFromGrid()
+                                        true
+                                    } else {
+                                        false
+                                    }
+                                }
+
+                                android.view.KeyEvent.KEYCODE_BACK,
+                                android.view.KeyEvent.KEYCODE_ESCAPE -> {
+                                    coroutineScope.launch {
+                                        gridState.animateScrollToItem(0)
+                                    }
+                                    onBackFromGrid()
+                                    true
+                                }
+                                else -> false
+                            }
+                        }
+                    } else {
+                        Modifier
+                    }
+                ),
+            contentPadding = PaddingValues(
+                start = if (isTv) 10.dp else 0.dp,
+                top = if (isTv) 8.dp else 0.dp,
+                end = if (isTv) 10.dp else 0.dp,
+                bottom = if (isTv) 24.dp else 28.dp
+            ),
+            verticalArrangement = Arrangement.spacedBy(if (isTv) 14.dp else 12.dp),
+            horizontalArrangement = Arrangement.spacedBy(if (isTv) 14.dp else 12.dp)
+        ) {
+            items(
+                count = pagingItems.itemCount,
+                key = pagingItems.itemKey { video -> video.id.ifBlank { "${video.typeId}-${video.name}" } }
+            ) { index ->
+                val video = pagingItems[index] ?: return@items
+                TvSurface(
+                    modifier = Modifier.onFocusChanged { focusState ->
+                        if (focusState.isFocused) focusedIndex = index
+                        onGridFocusChanged(focusState.isFocused)
+                    },
+                    onClick = {
+                        navController.navigate(
+                            Screen.VideoDetail.createRoute(video.siteKey.ifBlank { currentSiteKey }, video.id)
+                        )
+                    }
+                ) {
+                    VideoCard(video = video)
+                }
             }
-        } else if (appendState is LoadState.Error) {
-            item(span = { GridItemSpan(maxLineSpan) }) {
-                AppButton(text = "加载更多失败，重试", onClick = { pagingItems.retry() }, modifier = Modifier.padding(vertical = 8.dp))
-            }
-        } else if (appendState is LoadState.NotLoading && appendState.endOfPaginationReached && pagingItems.itemCount > 0) {
-            item(span = { GridItemSpan(maxLineSpan) }) {
-                Text("没有更多内容了", color = AppTextMuted, fontSize = 13.sp, modifier = Modifier.padding(vertical = 8.dp))
+
+            if (appendState is LoadState.Loading) {
+                item(span = { GridItemSpan(maxLineSpan) }) {
+                    Text("正在加载更多...", color = AppTextMuted, fontSize = 13.sp, modifier = Modifier.padding(vertical = 8.dp))
+                }
+            } else if (appendState is LoadState.Error) {
+                item(span = { GridItemSpan(maxLineSpan) }) {
+                    AppButton(text = "加载更多失败，重试", onClick = { pagingItems.retry() }, modifier = Modifier.padding(vertical = 8.dp))
+                }
+            } else if (appendState is LoadState.NotLoading && appendState.endOfPaginationReached && pagingItems.itemCount > 0) {
+                item(span = { GridItemSpan(maxLineSpan) }) {
+                    Text("没有更多内容了", color = AppTextMuted, fontSize = 13.sp, modifier = Modifier.padding(vertical = 8.dp))
+                }
             }
         }
     }

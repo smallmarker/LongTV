@@ -453,12 +453,12 @@ private fun TvSearchListItem(
                 shape = shape
             ),
             focusedBorder = Border(
-                border = BorderStroke(2.dp, BrandPrimary.copy(alpha = 0.95f)),
+                border = BorderStroke(2.dp, AppThemeTokens.tvFocusBorder()),
                 inset = 0.dp,
                 shape = shape
             ),
             pressedBorder = Border(
-                border = BorderStroke(2.dp, BrandPrimary),
+                border = BorderStroke(2.dp, AppThemeTokens.tvFocusPressedBorder()),
                 inset = 0.dp,
                 shape = shape
             )

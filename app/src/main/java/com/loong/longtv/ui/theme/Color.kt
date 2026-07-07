@@ -20,6 +20,10 @@ val AppSuccess = Color(0xFF65D38A)
 val AppError = Color(0xFFFF7C7C)
 
 val KeyboardDefault = Color(0x33243A5A)
-val KeyboardFocused = Color(0xFF355E93)
-val KeyboardPressed = Color(0xFF27466D)
+val KeyboardFocused = Color(0x332E6F91)
+val KeyboardPressed = Color(0x3DFFB84D)
 val KeyboardDisabled = Color(0x1FFFFFFF)
+
+val TvFocusBorder = Color(0xFF8FCFE8)
+val TvFocusBorderSoft = Color(0x668FCFE8)
+val TvFocusPressedBorder = Color(0xCCFFD08A)

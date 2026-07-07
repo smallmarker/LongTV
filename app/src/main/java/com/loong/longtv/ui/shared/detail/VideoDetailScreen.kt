@@ -69,6 +69,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.media3.common.Player
 import androidx.navigation.NavController
 import androidx.navigation.compose.currentBackStackEntryAsState
+import androidx.tv.material3.Border
 import androidx.tv.material3.ClickableSurfaceDefaults
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
@@ -775,21 +776,33 @@ private fun TvDetailActionButton(
     val shape = AppThemeTokens.buttonShape()
     TvSurface(
         onClick = onClick,
-        modifier = modifier
-            .clip(shape)
-            .border(
-                BorderStroke(
-                    1.dp,
-                    if (prominent) BrandPrimary.copy(alpha = 0.32f) else Color.White.copy(alpha = 0.08f)
-                ),
-                shape
-            ),
+        modifier = modifier,
         shape = ClickableSurfaceDefaults.shape(shape),
         colors = ClickableSurfaceDefaults.colors(
             containerColor = if (prominent) BrandPrimary.copy(alpha = 0.16f) else AppSurface.copy(alpha = 0.92f),
-            focusedContainerColor = if (prominent) BrandPrimary.copy(alpha = 0.28f) else AppSurfaceVariant,
+            focusedContainerColor = if (prominent) BrandPrimary.copy(alpha = 0.20f) else AppThemeTokens.tvFocusContainer(),
             pressedContainerColor = if (prominent) BrandPrimary.copy(alpha = 0.22f) else AppSurfaceVariant.copy(alpha = 0.96f),
             disabledContainerColor = AppSurfaceVariant.copy(alpha = 0.58f)
+        ),
+        border = ClickableSurfaceDefaults.border(
+            border = Border(
+                border = BorderStroke(
+                    1.dp,
+                    if (prominent) BrandPrimary.copy(alpha = 0.32f) else Color.White.copy(alpha = 0.08f)
+                ),
+                inset = 1.dp,
+                shape = shape
+            ),
+            focusedBorder = Border(
+                border = BorderStroke(2.dp, AppThemeTokens.tvFocusBorder()),
+                inset = 2.dp,
+                shape = shape
+            ),
+            pressedBorder = Border(
+                border = BorderStroke(2.dp, AppThemeTokens.tvFocusPressedBorder()),
+                inset = 2.dp,
+                shape = shape
+            )
         )
     ) {
         Text(

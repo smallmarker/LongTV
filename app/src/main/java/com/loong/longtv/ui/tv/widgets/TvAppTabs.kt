@@ -2,6 +2,7 @@ package com.loong.longtv.ui.tv.widgets
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.itemsIndexed
@@ -35,6 +36,7 @@ fun TvChipTabs(
     LazyRow(
         state = listState,
         modifier = modifier,
+        contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp),
         horizontalArrangement = Arrangement.spacedBy(8.dp)
     ) {
         itemsIndexed(items) { index, item ->
@@ -67,6 +69,7 @@ fun TvSiteSelector(
     LazyRow(
         state = listState,
         modifier = modifier,
+        contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp),
         horizontalArrangement = Arrangement.spacedBy(12.dp)
     ) {
         itemsIndexed(sites) { _, site ->

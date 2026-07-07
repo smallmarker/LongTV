@@ -18,6 +18,8 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
@@ -44,9 +46,11 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavController
 import androidx.tv.material3.ClickableSurfaceDefaults
+import androidx.tv.material3.Icon
 import androidx.tv.material3.Text
 import com.loong.longtv.data.room.entity.WatchHistoryEntity
 import com.loong.longtv.nav.Screen
+import com.loong.longtv.ui.shared.VideoPosterAspectRatio
 import com.loong.longtv.ui.shared.history.HistoryViewModel
 import com.loong.longtv.ui.shared.widgets.AppButton
 import com.loong.longtv.ui.shared.widgets.AppScreen
@@ -132,7 +136,7 @@ fun HistoryTvScreen(
         if (histories.isEmpty()) {
             TvHistoryEmptyState()
         } else {
-            Spacer(modifier = Modifier.height(20.dp))
+            Spacer(modifier = Modifier.height(28.dp))
             LazyColumn(
                 verticalArrangement = Arrangement.spacedBy(18.dp)
             ) {
@@ -197,14 +201,25 @@ private fun TvHistoryTopBar(
                         shape = AppThemeTokens.buttonShape()
                     )
                     .padding(horizontal = 16.dp, vertical = 12.dp),
-                contentAlignment = Alignment.CenterStart
+                contentAlignment = Alignment.Center
             ) {
-                Text(
-                    text = "返回",
-                    color = AppTextPrimary,
-                    fontSize = 18.sp,
-                    fontWeight = FontWeight.Medium
-                )
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Icon(
+                        imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                        contentDescription = "返回",
+                        tint = AppTextPrimary,
+                        modifier = Modifier.size(18.dp)
+                    )
+                    Text(
+                        text = "返回",
+                        color = AppTextPrimary,
+                        fontSize = 18.sp,
+                        fontWeight = FontWeight.Medium
+                    )
+                }
             }
         }
         Spacer(modifier = Modifier.weight(1f))
@@ -356,8 +371,8 @@ private fun TvHistoryPosterCard(
         modifier = modifier
             .onFocusChanged { focused = it.isFocused }
             .graphicsLayer {
-                scaleX = if (focused) 1.03f else 1f
-                scaleY = if (focused) 1.03f else 1f
+                scaleX = if (focused) 1.02f else 1f
+                scaleY = if (focused) 1.02f else 1f
             },
         colors = ClickableSurfaceDefaults.colors(
             containerColor = Color.Transparent,
@@ -367,7 +382,7 @@ private fun TvHistoryPosterCard(
         ),
         interactionSource = interactionSource
     ) {
-        Column(
+        Box(
             modifier = Modifier
                 .fillMaxWidth()
                 .background(
@@ -401,31 +416,41 @@ private fun TvHistoryPosterCard(
                 )
                 .padding(horizontal = 0.dp, vertical = 0.dp)
         ) {
-            Box {
-                SmartAsyncImage(
-                    model = item.cover,
-                    contentDescription = item.title,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .aspectRatio(0.84f)
-                        .clip(AppThemeTokens.cardShape()),
-                    contentScale = androidx.compose.ui.layout.ContentScale.Crop,
-                    fallbackText = item.title.ifBlank { "历史记录" }
-                )
+            SmartAsyncImage(
+                model = item.cover,
+                contentDescription = item.title,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .aspectRatio(VideoPosterAspectRatio)
+                    .clip(AppThemeTokens.cardShape()),
+                contentScale = androidx.compose.ui.layout.ContentScale.Crop,
+                fallbackText = item.title.ifBlank { "历史记录" }
+            )
 
-                if (editMode) {
-                    Box(
-                        modifier = Modifier
-                            .align(Alignment.TopStart)
-                            .padding(10.dp)
-                    ) {
-                        TvSelectionBadge(selected = selected, onClick = onToggleSelected)
-                    }
+            if (editMode) {
+                Box(
+                    modifier = Modifier
+                        .align(Alignment.TopStart)
+                        .padding(10.dp)
+                ) {
+                    TvSelectionBadge(selected = selected, onClick = onToggleSelected)
                 }
             }
 
             Column(
-                modifier = Modifier.padding(horizontal = 10.dp, vertical = 9.dp)
+                modifier = Modifier
+                    .align(Alignment.BottomStart)
+                    .fillMaxWidth()
+                    .background(
+                        Brush.verticalGradient(
+                            colors = listOf(
+                                Color.Transparent,
+                                Color.Black.copy(alpha = 0.72f),
+                                Color.Black.copy(alpha = 0.86f)
+                            )
+                        )
+                    )
+                    .padding(horizontal = 10.dp, vertical = 9.dp)
             ) {
                 Text(
                     text = item.title.ifBlank { "未命名内容" },
