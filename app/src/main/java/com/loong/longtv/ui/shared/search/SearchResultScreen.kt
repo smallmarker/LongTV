@@ -93,7 +93,8 @@ internal fun SearchResultContent(
             items = categories,
             selectedIndex = categories.indexOf(selectedCategory).coerceAtLeast(0),
             onSelect = { index -> categories.getOrNull(index)?.let(onSelectCategory) },
-            modifier = Modifier.padding(bottom = 16.dp)
+            modifier = Modifier.padding(bottom = 16.dp),
+            singleLine = phoneLayout
         )
         SearchResultGrid(
             modifier = Modifier.fillMaxSize(),

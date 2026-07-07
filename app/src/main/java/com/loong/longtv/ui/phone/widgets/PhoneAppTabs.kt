@@ -4,6 +4,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.itemsIndexed
@@ -25,8 +26,36 @@ fun PhoneChipTabs(
     items: List<String>,
     selectedIndex: Int,
     onSelect: (Int) -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    singleLine: Boolean = false
 ) {
+    if (singleLine) {
+        val listState = rememberLazyListState()
+
+        LaunchedEffect(selectedIndex, items.size) {
+            if (items.isNotEmpty()) {
+                listState.animateScrollToItem(selectedIndex.coerceIn(0, items.lastIndex))
+            }
+        }
+
+        LazyRow(
+            state = listState,
+            modifier = modifier,
+            contentPadding = PaddingValues(vertical = 4.dp),
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            itemsIndexed(items) { index, item ->
+                TabChip(
+                    text = item,
+                    selected = index == selectedIndex,
+                    compact = true,
+                    onClick = { onSelect(index) }
+                )
+            }
+        }
+        return
+    }
+
     FlowRow(
         modifier = modifier,
         horizontalArrangement = Arrangement.spacedBy(8.dp),

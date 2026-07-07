@@ -15,14 +15,16 @@ fun AdaptiveChipTabs(
     items: List<String>,
     selectedIndex: Int,
     onSelect: (Int) -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    singleLine: Boolean = false
 ) {
     when (currentDeviceClass()) {
         DeviceClass.PHONE -> PhoneChipTabs(
             items = items,
             selectedIndex = selectedIndex,
             onSelect = onSelect,
-            modifier = modifier
+            modifier = modifier,
+            singleLine = singleLine
         )
         DeviceClass.TV -> TvChipTabs(
             items = items,
