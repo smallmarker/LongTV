@@ -5,6 +5,7 @@ import android.os.Handler
 import android.os.Looper
 import android.util.Log
 import com.github.catvod.Init
+import com.loong.longtv.data.cache.CacheStorage
 import dagger.hilt.android.HiltAndroidApp
 
 @HiltAndroidApp
@@ -20,6 +21,8 @@ class App : Application() {
         super.onCreate()
         instance = this
         Init.set(this)
+        // 旧版本可能已留下数百 MB 的视频缓存，避免首次升级后仍长期占用空间。
+        Thread { CacheStorage.enforceBudget(this) }.start()
         installMainThreadCrashProtection()
     }
 

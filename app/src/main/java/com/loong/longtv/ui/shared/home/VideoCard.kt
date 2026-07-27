@@ -27,7 +27,9 @@ import com.loong.longtv.ui.theme.AppThemeTokens
 import com.loong.longtv.ui.theme.BrandPrimary
 
 @Composable
-fun VideoCard(video: VodInfo) {
+fun VideoCard(
+    video: VodInfo
+) {
     val isTv = currentDeviceClass() == DeviceClass.TV
     val title = video.displayTitle()
     val score = video.displayScore()
@@ -42,13 +44,12 @@ fun VideoCard(video: VodInfo) {
             .background(MaterialTheme.colorScheme.surface)
     ) {
         SmartAsyncImage(
-            model = video.pic.orEmpty().trim(),
+            model = video.poster,
             contentDescription = title,
             modifier = Modifier
                 .fillMaxWidth()
                 .clip(shape),
-            contentScale = ContentScale.Crop,
-            fallbackText = "暂无海报"
+            contentScale = ContentScale.Crop
         )
         Box(
             modifier = Modifier

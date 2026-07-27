@@ -69,7 +69,9 @@ class ConfigParser(private val gson: Gson = Gson()) {
                     url = obj.stringOrEmpty("url").resolveRelativePath(resolveBase),
                     playerType = obj.intOrDefault("playerType", 0),
                     epg = obj.stringOrNull("epg"),
-                    logo = obj.stringOrNull("logo")
+                    logo = obj.stringOrNull("logo"),
+                    ua = obj.stringOrNull("ua"),
+                    timeout = obj.intOrDefault("timeout", 10)
                 )
             }.getOrNull()
         } ?: emptyList()

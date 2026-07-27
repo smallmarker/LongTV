@@ -26,7 +26,8 @@ import okhttp3.RequestBody;
 public class OkHttp {
 
     private static final int TIMEOUT = 30 * 1000;
-    private static final int CACHE = 100 * 1024 * 1024;
+    // DoH responses are tiny; keep this bounded so it cannot compete with video cache.
+    private static final int CACHE = 4 * 1024 * 1024;
 
     private DnsOverHttps dns;
     private OkHttpClient client;

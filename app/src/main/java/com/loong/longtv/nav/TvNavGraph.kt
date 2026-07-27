@@ -8,6 +8,7 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import com.google.gson.Gson
+import com.loong.longtv.ui.tv.child.ChildEducationTvScreen
 import com.loong.longtv.ui.tv.detail.TvFullscreenPlayerScreen
 import com.loong.longtv.ui.tv.detail.VideoDetailTvScreen
 import com.loong.longtv.ui.tv.favorite.FavoriteTvScreen
@@ -30,6 +31,10 @@ fun TvNavGraph() {
 
         composable(Screen.Popular.route) {
             PopularTvScreen(navController = navController)
+        }
+
+        composable(Screen.ChildEducation.route) {
+            ChildEducationTvScreen(navController = navController)
         }
 
         composable(Screen.Live.route) {

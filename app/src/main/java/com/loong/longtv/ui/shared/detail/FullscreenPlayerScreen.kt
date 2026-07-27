@@ -7,6 +7,9 @@ import android.content.ContextWrapper
 import android.content.pm.ActivityInfo
 import android.media.AudioManager
 import android.os.SystemClock
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.tween
@@ -169,6 +172,7 @@ internal fun FullscreenPlayerContent(
     var remoteSeekDirection by remember(title, videoUrl) { mutableIntStateOf(0) }
     var remoteSeekAnchorMs by remember(title, videoUrl) { mutableLongStateOf(0L) }
     var remoteSeekPreviewMs by remember(title, videoUrl) { mutableLongStateOf(0L) }
+    var currentClockText by remember { mutableStateOf(formatCurrentTime()) }
 
     val episodeLabel = if (episodeCount > 0) "第${episodeIndex + 1}集" else "单集播放"
     val compactTitle = buildString {
@@ -224,6 +228,14 @@ internal fun FullscreenPlayerContent(
         val targetIsPlaying = !isPlaying
         controlState.togglePlayPause()
         interactionState.showPlayPause(targetIsPlaying)
+    }
+
+    fun replayFromStart() {
+        currentPositionMs = 0L
+        interactionState.commitScrub(0L)
+        onProgressChangedExternal?.invoke(0L, durationMs)
+        controlState.seekToAndPlay(0L)
+        interactionState.showPlayPause(true)
     }
 
     fun showTvControls() {
@@ -439,6 +451,13 @@ internal fun FullscreenPlayerContent(
         }
     }
 
+    LaunchedEffect(Unit) {
+        while (isActive) {
+            currentClockText = formatCurrentTime()
+            delay(1_000L)
+        }
+    }
+
     LaunchedEffect(isTv, playbackError) {
         if (isTv && playbackError == null) {
             tvFocusRequester.requestFocus()
@@ -567,6 +586,7 @@ internal fun FullscreenPlayerContent(
             modifier = Modifier.fillMaxSize(),
             videoUrl = videoUrl,
             requestHeaders = requestHeaders,
+            mediaIdentity = "episode-$episodeIndex",
             initialPositionMs = initialPositionMs,
             repeat = false,
             showController = false,
@@ -595,6 +615,22 @@ internal fun FullscreenPlayerContent(
                 interactionState.showControls()
             },
             onSurfaceTap = null
+        )
+
+        Text(
+            text = currentClockText,
+            color = AppTextPrimary,
+            fontSize = if (isTv) 18.sp else 14.sp,
+            fontWeight = FontWeight.SemiBold,
+            modifier = Modifier
+                .align(Alignment.TopEnd)
+                .padding(
+                    top = if (isTv) 18.dp else 14.dp,
+                    end = if (isTv) 22.dp else 16.dp
+                )
+                .clip(RoundedCornerShape(8.dp))
+                .background(Color.Black.copy(alpha = 0.42f))
+                .padding(horizontal = 10.dp, vertical = 5.dp)
         )
 
         val seekFeedbackVisible = interactionState.gestureInProgress ||
@@ -853,12 +889,22 @@ internal fun FullscreenPlayerContent(
                     } else {
                         PlayerActionChip(
                             modifier = if (isTv) Modifier.focusRequester(tvPrimaryActionFocusRequester) else Modifier,
+                            text = "重播",
+                            large = isTv,
+                            onClick = ::replayFromStart
+                        )
+                        PlayerActionChip(
                             text = "倍速 ${formatPlaybackSpeed(playbackSpeed)}",
                             large = isTv,
                             onClick = { togglePanel(BottomPanel.SPEED) }
                         )
                     }
                     if (episodeCount > 1) {
+                        PlayerActionChip(
+                            text = "重播",
+                            large = isTv,
+                            onClick = ::replayFromStart
+                        )
                         PlayerActionChip(
                             text = "倍速 ${formatPlaybackSpeed(playbackSpeed)}",
                             large = isTv,
@@ -1242,6 +1288,8 @@ private enum class PlayerIcon {
 private const val REMOTE_SEEK_INITIAL_STEP_MS = 10_000L
 private const val REMOTE_SEEK_SPEED_MS_PER_SECOND = 18_000L
 private const val REMOTE_SEEK_PREVIEW_FRAME_MS = 50L
+
+private fun formatCurrentTime(): String = SimpleDateFormat("HH:mm", Locale.getDefault()).format(Date())
 
 @Composable
 private fun IconOnlyButton(

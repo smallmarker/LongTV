@@ -508,8 +508,7 @@ private fun FavoriteTvPosterCard(
                         .fillMaxWidth()
                         .aspectRatio(VideoPosterAspectRatio)
                         .clip(AppThemeTokens.cardShape()),
-                    contentScale = ContentScale.Crop,
-                    fallbackText = item.title.ifBlank { "收藏内容" }
+                    contentScale = ContentScale.Crop
                 )
 
                 if (editMode) {

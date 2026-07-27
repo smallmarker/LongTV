@@ -331,6 +331,7 @@ internal fun DetailPreviewBlock(
                 modifier = Modifier.fillMaxSize(),
                 videoUrl = playableMedia.url,
                 requestHeaders = playableMedia.headers,
+                mediaIdentity = "episode-$selectedEpisodeIndex",
                 initialPositionMs = resumePositionMs,
                 repeat = false,
                 enableNativeController = false,
@@ -340,6 +341,10 @@ internal fun DetailPreviewBlock(
                 onProgressChanged = { position, duration ->
                     currentPositionMs = position
                     durationMs = duration
+                    if (position > 0L || duration > 0L) {
+                        playerReady = true
+                        isBuffering = false
+                    }
                     interactionState.syncPlaybackPosition(position)
                     onProgressChanged(position, duration)
                 },
@@ -351,6 +356,10 @@ internal fun DetailPreviewBlock(
                 },
                 onPlayingChanged = { playing ->
                     isPlaying = playing
+                    if (playing) {
+                        playerReady = true
+                        isBuffering = false
+                    }
                 },
                 onPlaybackEnded = onPlaybackEnded,
                 onSurfaceTap = null
@@ -362,8 +371,7 @@ internal fun DetailPreviewBlock(
                 modifier = Modifier
                     .fillMaxSize()
                     .background(MaterialTheme.colorScheme.surfaceVariant),
-                contentScale = ContentScale.Crop,
-                fallbackText = title
+                contentScale = ContentScale.Crop
             )
         }
 

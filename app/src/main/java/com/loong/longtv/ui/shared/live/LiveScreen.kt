@@ -151,7 +151,8 @@ internal fun LiveScreenContent(
             val failedUrls = invalidChannelUrls + selectedChannel.url
             val fallbackIndex = uiState.channels.findFallbackLiveChannelIndex(
                 currentIndex = selectedIndex,
-                invalidUrls = failedUrls
+                invalidUrls = failedUrls,
+                preferSameIdentity = false
             )
             if (fallbackIndex != null) {
                 invalidChannelUrls = failedUrls
@@ -225,7 +226,8 @@ internal fun LiveScreenContent(
                         invalidChannelUrls = failedUrls
                         val fallbackIndex = uiState.channels.findFallbackLiveChannelIndex(
                             currentIndex = selectedIndex,
-                            invalidUrls = failedUrls
+                            invalidUrls = failedUrls,
+                            preferSameIdentity = false
                         )
                         if (fallbackIndex != null) {
                             selectedIndex = fallbackIndex
@@ -568,24 +570,28 @@ private fun LiveChannelMenuItem(
 
 private fun List<LiveChannel>.defaultLiveChannelIndex(): Int {
     if (isEmpty()) return 0
-    return indexOfFirst { channel ->
-        val name = channel.name.uppercase()
-        name == "CCTV1" || name == "CCTV-1" || name.contains("CCTV1") || name.contains("CCTV-1")
-    }.takeIf { it >= 0 } ?: 0
+    val preferredCctv = withIndex()
+        .filter { (_, channel) -> channel.isCctvOne() }
+        .maxByOrNull { (_, channel) -> channel.livePlaybackScore() }
+        ?.takeIf { (_, channel) -> channel.livePlaybackScore() >= MIN_DEFAULT_PLAYBACK_SCORE }
+        ?.index
+    return preferredCctv ?: withIndex().maxByOrNull { (_, channel) -> channel.livePlaybackScore() }?.index ?: 0
 }
 
 private fun List<LiveChannel>.findFallbackLiveChannelIndex(
     currentIndex: Int,
     invalidUrls: Set<String>,
+    preferSameIdentity: Boolean = true,
 ): Int? {
     val current = getOrNull(currentIndex) ?: return null
     val identity = current.liveIdentity()
     val forwardRange = (currentIndex + 1)..lastIndex
     val backwardRange = 0 until currentIndex
-    return (forwardRange + backwardRange).firstOrNull { index ->
-        val channel = get(index)
-        channel.url !in invalidUrls && channel.liveIdentity() == identity
+    val orderedIndexes = (forwardRange + backwardRange).filter { index -> get(index).url !in invalidUrls }
+    if (preferSameIdentity) {
+        orderedIndexes.firstOrNull { index -> get(index).liveIdentity() == identity }?.let { return it }
     }
+    return orderedIndexes.maxByOrNull { index -> get(index).livePlaybackScore() }
 }
 
 private fun LiveChannel.liveIdentity(): String {
@@ -595,6 +601,30 @@ private fun LiveChannel.liveIdentity(): String {
         ?.getOrNull(1)
     if (!cctvNumber.isNullOrBlank()) return "CCTV$cctvNumber"
     return name.filter { it.isLetterOrDigit() }.uppercase().ifBlank { name.uppercase() }
+}
+
+private fun LiveChannel.isCctvOne(): Boolean {
+    return Regex("""CCTV[-\s]?0?1(?!\d)""", RegexOption.IGNORE_CASE).containsMatchIn(name)
+}
+
+private fun LiveChannel.livePlaybackScore(): Int {
+    val lowerUrl = url.lowercase()
+    val lowerName = name.lowercase()
+    var score = 0
+    when {
+        lowerUrl.contains(".m3u8") -> score += 80
+        lowerUrl.contains(".flv") -> score += 70
+        lowerUrl.contains(".mp4") -> score += 60
+        lowerUrl.contains(".ts") -> score += 50
+    }
+    if (lowerUrl.contains("4gtv") || lowerUrl.contains("litv")) score += 18
+    if (lowerUrl.contains("ptqy.gitv.tv")) score += 12
+    if (lowerName.contains("cctv")) score += 8
+    if (lowerUrl.contains("tvtj.jxwltx.com")) score -= 45
+    if (lowerUrl.contains("bkpcp.top") || lowerUrl.contains("42.194.148.122") || lowerUrl.contains("061899.xyz")) {
+        score -= 35
+    }
+    return score
 }
 
 private fun String.toLivePlaybackErrorText(): String {
@@ -614,6 +644,7 @@ private fun String.isBehindLiveWindowError(): Boolean {
 }
 
 private const val LIVE_BUFFER_STALL_FALLBACK_MS = 10_000L
+private const val MIN_DEFAULT_PLAYBACK_SCORE = 50
 
 private tailrec fun Context.findActivity(): Activity? = when (this) {
     is Activity -> this

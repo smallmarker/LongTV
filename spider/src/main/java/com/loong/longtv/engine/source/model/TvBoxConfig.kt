@@ -77,7 +77,9 @@ data class LiveConfig(
     val url: String = "",
     val playerType: Int = 0,
     val epg: String? = null,
-    val logo: String? = null
+    val logo: String? = null,
+    val ua: String? = null,
+    val timeout: Int = 10
 )
 
 data class LiveChannel(

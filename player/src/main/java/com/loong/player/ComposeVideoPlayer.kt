@@ -48,6 +48,7 @@ fun ComposeVideoPlayer(
     modifier: Modifier,
     videoUrl: String,
     requestHeaders: Map<String, String> = emptyMap(),
+    mediaIdentity: String = videoUrl,
     initialPositionMs: Long = 0,
     repeat: Boolean = true,
     autoPlay: Boolean = true,
@@ -77,17 +78,17 @@ fun ComposeVideoPlayer(
     val latestOnPlaybackError by rememberUpdatedState(onPlaybackError)
     val currentResizeMode = controlState?.resizeMode ?: resizeMode
     val useNativeController = enableNativeController && (showController || touchControllerEnabled)
-    val player = remember(videoUrl, requestHeaders, sharedSessionEnabled, cacheEnabled, liveStream) {
+    val player = remember(videoUrl, requestHeaders, mediaIdentity, sharedSessionEnabled, cacheEnabled, liveStream) {
         if (sharedSessionEnabled) {
-            SharedPlayerSession.acquire(context, videoUrl, requestHeaders, repeat, cacheEnabled, liveStream)
+            SharedPlayerSession.acquire(context, videoUrl, requestHeaders, mediaIdentity, repeat, cacheEnabled, liveStream)
         } else {
             createExoPlayer(context, requestHeaders, repeat, cacheEnabled, liveStream)
         }
     }
 
-    LaunchedEffect(player, videoUrl, requestHeaders, sharedSessionEnabled, cacheEnabled, liveStream) {
+    LaunchedEffect(player, videoUrl, requestHeaders, mediaIdentity, sharedSessionEnabled, cacheEnabled, liveStream) {
         try {
-            if (!sharedSessionEnabled || SharedPlayerSession.needsPrepare(videoUrl, requestHeaders, cacheEnabled, liveStream)) {
+            if (!sharedSessionEnabled || SharedPlayerSession.needsPrepare(videoUrl, requestHeaders, mediaIdentity, cacheEnabled, liveStream)) {
                 val mimeType = MediaMimeTypes.infer(videoUrl)
                 val itemBuilder = MediaItem.Builder().setUri(videoUrl.toUri())
                 if (mimeType != null) {
@@ -106,7 +107,7 @@ fun ComposeVideoPlayer(
                 player.setMediaItem(item)
                 player.prepare()
                 if (initialPositionMs > 0) player.seekTo(initialPositionMs)
-                SharedPlayerSession.markPrepared(videoUrl, requestHeaders, cacheEnabled, liveStream)
+                SharedPlayerSession.markPrepared(videoUrl, requestHeaders, mediaIdentity, cacheEnabled, liveStream)
             } else if (initialPositionMs > 0 && player.currentPosition <= 0L) {
                 player.seekTo(initialPositionMs)
             }
@@ -141,6 +142,11 @@ fun ComposeVideoPlayer(
             is PlayerCommand.SeekTo -> {
                 val duration = player.duration.takeIf { it > 0 } ?: Long.MAX_VALUE
                 player.seekTo(command.positionMs.coerceIn(0L, duration))
+            }
+            is PlayerCommand.SeekToAndPlay -> {
+                val duration = player.duration.takeIf { it > 0 } ?: Long.MAX_VALUE
+                player.seekTo(command.positionMs.coerceIn(0L, duration))
+                player.play()
             }
             is PlayerCommand.SetSpeed -> player.setPlaybackSpeed(command.speed)
             is PlayerCommand.SetVolume -> player.volume = command.volume.coerceIn(0f, 1f)
@@ -385,7 +391,8 @@ private fun createStreamingLoadControl(liveStream: Boolean): DefaultLoadControl 
 
 @OptIn(UnstableApi::class)
 private object VideoPlayerCache {
-    private const val MAX_CACHE_BYTES = 768L * 1024L * 1024L
+    // Keep video data below 48MB so all disk caches stay within the app's 80MB budget.
+    private const val MAX_CACHE_BYTES = 48L * 1024L * 1024L
     private var cache: SimpleCache? = null
 
     @Synchronized
@@ -446,12 +453,13 @@ private object SharedPlayerSession {
         context: Context,
         videoUrl: String,
         requestHeaders: Map<String, String>,
+        mediaIdentity: String,
         repeat: Boolean,
         cacheEnabled: Boolean,
         liveStream: Boolean
     ): ExoPlayer {
         releaseJob?.cancel()
-        val key = buildKey(videoUrl, requestHeaders, cacheEnabled, liveStream)
+        val key = buildKey(videoUrl, requestHeaders, mediaIdentity, cacheEnabled, liveStream)
         val existing = player
         return if (existing != null && mediaKey == key) {
             refCount += 1
@@ -471,19 +479,21 @@ private object SharedPlayerSession {
     fun needsPrepare(
         videoUrl: String,
         requestHeaders: Map<String, String>,
+        mediaIdentity: String,
         cacheEnabled: Boolean,
         liveStream: Boolean
     ): Boolean {
-        return preparedKey != buildKey(videoUrl, requestHeaders, cacheEnabled, liveStream)
+        return preparedKey != buildKey(videoUrl, requestHeaders, mediaIdentity, cacheEnabled, liveStream)
     }
 
     fun markPrepared(
         videoUrl: String,
         requestHeaders: Map<String, String>,
+        mediaIdentity: String,
         cacheEnabled: Boolean,
         liveStream: Boolean
     ) {
-        preparedKey = buildKey(videoUrl, requestHeaders, cacheEnabled, liveStream)
+        preparedKey = buildKey(videoUrl, requestHeaders, mediaIdentity, cacheEnabled, liveStream)
     }
 
     fun release(target: ExoPlayer, delayMs: Long) {
@@ -493,10 +503,12 @@ private object SharedPlayerSession {
         }
         refCount = (refCount - 1).coerceAtLeast(0)
         if (refCount == 0) {
+            // Keep the delayed release for a seamless detail-to-fullscreen handoff,
+            // but silence playback as soon as the last UI surface goes away.
+            target.pause()
             releaseJob?.cancel()
             releaseJob = scope.launch {
                 if (delayMs > 0) delay(delayMs)
-                target.pause()
                 player?.release()
                 player = null
                 attachedView = null
@@ -525,10 +537,11 @@ private object SharedPlayerSession {
     private fun buildKey(
         videoUrl: String,
         requestHeaders: Map<String, String>,
+        mediaIdentity: String,
         cacheEnabled: Boolean,
         liveStream: Boolean
     ): String {
-        return videoUrl + "#cache=$cacheEnabled#live=$liveStream#" + requestHeaders.toList()
+        return "$mediaIdentity#$videoUrl#cache=$cacheEnabled#live=$liveStream#" + requestHeaders.toList()
             .sortedBy { it.first }
             .joinToString("&") { "${it.first}=${it.second}" }
     }

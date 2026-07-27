@@ -81,6 +81,7 @@ internal fun PopularScreenContent(
     navController: NavController,
     uiState: PopularUiState,
     isTv: Boolean,
+    loadingText: String = "正在加载热门影视...",
     onRetry: () -> Unit,
     onTabFocused: ((Int) -> Unit)? = null,
     onTabSelected: (Int) -> Unit,
@@ -91,7 +92,7 @@ internal fun PopularScreenContent(
         verticalArrangement = Arrangement.spacedBy(if (isTv) 18.dp else 14.dp)
     ) {
         when {
-            uiState.loading -> LoadingState("正在加载热门影视...")
+            uiState.loading -> LoadingState(loadingText)
             uiState.errorMessage != null -> ErrorState(uiState.errorMessage, onRetry)
             else -> PopularContentSection(
                 tabs = uiState.tabs,
@@ -270,8 +271,8 @@ private fun PopularVideoGrid(
     LaunchedEffect(pagingItems.itemCount) {
         prefetchSmartImages(
             context = context,
-            models = pagingItems.itemSnapshotList.items.map { it.pic },
-            limit = if (isTv) 36 else 18
+            models = pagingItems.itemSnapshotList.items.map { it.poster },
+            limit = if (isTv) 12 else 8
         )
     }
 

@@ -2,9 +2,11 @@ package com.loong.longtv.engine.source
 
 import android.util.Log
 import com.google.gson.Gson
+import com.google.gson.JsonObject
 import com.google.gson.reflect.TypeToken
 import com.loong.longtv.engine.source.model.HomeContent
 import com.loong.longtv.engine.source.model.PlayerInfo
+import com.loong.longtv.engine.source.model.PosterImage
 import com.loong.longtv.engine.source.model.SiteConfig
 import com.loong.longtv.engine.source.model.VodInfo
 import com.loong.longtv.engine.source.model.VodListResult
@@ -12,6 +14,7 @@ import com.loong.longtv.engine.spider.SpiderManager
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeout
+import java.net.URI
 
 /**
  * 统一数据源 - 对UI层暴露的唯一数据接口
@@ -39,8 +42,9 @@ class SourceRepository(
     suspend fun getHomeVideos(site: SiteConfig): Result<VodListResult> =
         callSpider(site, "homeVideoContent") { spider ->
             val json = spider.homeVideoContent()
-            if (json.isBlank()) VodListResult()
+            val result = if (json.isBlank()) VodListResult()
             else parseJson<VodListResult>(json) ?: VodListResult()
+            result.withPosterContext(site)
         }
 
     /**
@@ -54,7 +58,7 @@ class SourceRepository(
     ): Result<VodListResult> =
         callSpider(site, "categoryContent") { spider ->
             val json = spider.categoryContent(categoryId, page.toString(), true, filters)
-            parseJson<VodListResult>(json) ?: VodListResult()
+            (parseJson<VodListResult>(json) ?: VodListResult()).withPosterContext(site)
         }
 
     /**
@@ -64,7 +68,7 @@ class SourceRepository(
         callSpider(site, "detailContent") { spider ->
             val json = spider.detailContent(mutableListOf(vodId))
             val result = parseJson<VodListResult>(json)
-            result?.list?.firstOrNull()?.also { it.siteKey = site.key }
+            result?.list?.firstOrNull()?.also { it.attachPosterContext(site) }
         }
 
     /**
@@ -78,7 +82,7 @@ class SourceRepository(
                 spider.searchContent(keyword, false)
             }
             val result = parseJson<VodListResult>(json) ?: VodListResult()
-            result.copy(list = result.list.map { it.also { v -> v.siteKey = site.key } })
+            result.copy(list = result.list.map { it.also { v -> v.attachPosterContext(site) } })
         }
 
     /**
@@ -121,7 +125,53 @@ class SourceRepository(
         }.getOrNull()
     }
 
+    private fun VodListResult.withPosterContext(site: SiteConfig): VodListResult =
+        copy(list = list.map { it.also { video -> video.attachPosterContext(site) } })
+
+    private fun VodInfo.attachPosterContext(site: SiteConfig) {
+        siteKey = site.key
+        poster = PosterImage(
+            url = normalizePosterUrl(pic, site.baseUrl()),
+            headers = site.posterHeaders()
+        )
+    }
+
+    private fun SiteConfig.baseUrl(): String {
+        val raw = (ext as? JsonObject)?.get("url")?.asString.orEmpty().trim()
+        return runCatching {
+            URI(raw).let { "${it.scheme}://${it.authority}" }
+        }.getOrDefault("")
+    }
+
+    private fun SiteConfig.posterHeaders(): Map<String, String> {
+        if (spiderClassName() == "Bili") {
+            return mapOf(
+                "Referer" to "https://www.bilibili.com/",
+                "User-Agent" to POSTER_USER_AGENT
+            )
+        }
+        if (spiderClassName() !in setOf("TianTian", "Xmfyy")) return emptyMap()
+        val baseUrl = baseUrl()
+        if (baseUrl.isBlank()) return emptyMap()
+        return mapOf(
+            "Referer" to "$baseUrl/",
+            "User-Agent" to POSTER_USER_AGENT
+        )
+    }
+
+    private fun normalizePosterUrl(rawUrl: String, baseUrl: String): String {
+        val url = rawUrl.trim().replace("&amp;", "&")
+        if (url.isBlank()) return ""
+        return when {
+            url.startsWith("//") -> "https:$url"
+            url.startsWith("/") && baseUrl.isNotBlank() -> baseUrl + url
+            else -> url
+        }
+    }
+
     companion object {
         private const val TAG = "SourceRepository"
+        private const val POSTER_USER_AGENT =
+            "Mozilla/5.0 (Linux; Android 12; LongTV) AppleWebKit/537.36 Chrome/120.0 Mobile Safari/537.36"
     }
 }

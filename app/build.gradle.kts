@@ -18,7 +18,19 @@ val keystoreProperties = Properties().apply {
     }
 }
 val apkBaseName = "LongTV"
-val apkVersionName = "1.0"
+// Single source of truth for the installed APK version, settings page and release file name.
+// Format: major.minor.patch, e.g. 1.1.0 -> 10100.
+val appVersionName = "1.0.1"
+val appVersionCode = appVersionName.split(".").let { parts ->
+    require(parts.size == 3 && parts.all { it.toIntOrNull() != null }) {
+        "appVersionName must use major.minor.patch format, for example 1.1.0"
+    }
+    val (major, minor, patch) = parts.map(String::toInt)
+    require(major >= 0 && minor in 0..99 && patch in 0..99) {
+        "appVersionName components must satisfy major >= 0, minor/patch <= 99"
+    }
+    major * 10_000 + minor * 100 + patch
+}
 val apkTimestamp: String
     get() = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.getDefault()).format(Date())
 
@@ -30,8 +42,8 @@ android {
         applicationId = "com.loong.longtv"
         minSdk = 23
         targetSdk = 35
-        versionCode = 1
-        versionName = "1.0"
+        versionCode = appVersionCode
+        versionName = appVersionName
         resourceConfigurations += listOf("zh", "en")
 
     }
@@ -88,7 +100,7 @@ val renameReleaseApk = tasks.register("renameReleaseApk") {
             ?.filter { it.isFile && it.name.startsWith("${apkBaseName}_v") && it.extension == "apk" }
             ?.forEach { it.delete() }
 
-        val targetApk = apkDir.resolve("${apkBaseName}_v${apkVersionName}_release_${apkTimestamp}.apk")
+        val targetApk = apkDir.resolve("${apkBaseName}_v${appVersionName}_release_${apkTimestamp}.apk")
         check(sourceApk.renameTo(targetApk)) {
             "Failed to rename ${sourceApk.absolutePath} to ${targetApk.absolutePath}"
         }

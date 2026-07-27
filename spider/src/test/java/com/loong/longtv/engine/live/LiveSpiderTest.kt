@@ -40,4 +40,21 @@ class LiveSpiderTest {
         assertEquals("湖南卫视", channels[1].name)
         assertEquals("卫视", channels[1].group)
     }
+
+    @Test
+    fun parseTxtSkipsSchedulePlaceholders() {
+        val content = """
+            女篮赛评,#genre#
+            07-19⬇️全国女子篮球锦标赛⬇️🏀📡,http://rihou.cc:555/tv/t
+            14:00上海浦发银行🆚福建金篮,http://rihou.cc:555/tv/v
+            国🔊19篮评述,http://example.com/live/19.m3u8
+            CCTV-10接口,http://42.194.148.122:1234/624878405
+        """.trimIndent()
+
+        val channels = TxtLiveParser.parse(content, "txt")
+
+        assertEquals(1, channels.size)
+        assertEquals("国🔊19篮评述", channels[0].name)
+        assertEquals("http://example.com/live/19.m3u8", channels[0].url)
+    }
 }

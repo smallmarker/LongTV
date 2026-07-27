@@ -28,6 +28,7 @@ fun SearchResultTvScreen(
     val error by viewModel.searchError.collectAsStateWithLifecycle()
     val categories = videoMap.keys.toList()
     var selectedCategory by rememberSaveable(keyword) { mutableStateOf<String?>(null) }
+    var restoreFocusKey by rememberSaveable(keyword) { mutableStateOf<String?>(null) }
 
     LaunchedEffect(videoMap) {
         if (selectedCategory !in categories) {
@@ -48,7 +49,12 @@ fun SearchResultTvScreen(
             compact = false,
             phoneLayout = false,
             onRetry = { viewModel.searchContent(keyword, force = true) },
-            onSelectCategory = { selectedCategory = it }
+            onSelectCategory = { selectedCategory = it },
+            restoreFocusKey = restoreFocusKey,
+            onVideoClick = { video ->
+                restoreFocusKey = "${video.siteKey}:${video.id}"
+            },
+            onFocusRestored = { restoreFocusKey = null }
         )
     }
 }

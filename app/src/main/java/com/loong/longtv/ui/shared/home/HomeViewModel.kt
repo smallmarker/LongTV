@@ -49,20 +49,24 @@ class HomeViewModel @Inject constructor(
             if (result.isSuccess) {
                 val sites = result.getOrThrow().sites.filter { it.isSpiderSite() }
                 val site = sites.selectPopularSite(sourcePreference.loadPopularSiteKey())
+                val childEducationSite = sites.firstOrNull { it.key == CHILD_EDUCATION_SITE_KEY }
                 _uiState.update { state ->
                     state.copy(
                         loading = false,
                         sourceName = site?.name.orEmpty(),
                         popularVideos = emptyList(),
+                        childEducationVideos = emptyList(),
                         errorMessage = null,
                     )
                 }
                 site?.let { loadPopularVideos(it) }
+                childEducationSite?.let { loadChildEducationVideos(it) }
             } else {
                 _uiState.update { state ->
                     state.copy(
                         loading = false,
                         popularVideos = emptyList(),
+                        childEducationVideos = emptyList(),
                         errorMessage = "加载播放源失败: ${result.exceptionOrNull()?.message.orEmpty()}",
                     )
                 }
@@ -83,6 +87,19 @@ class HomeViewModel @Inject constructor(
         }
     }
 
+    private fun loadChildEducationVideos(site: SiteConfig) {
+        viewModelScope.launch {
+            val result = engine.sourceRepository.getHomeVideos(site)
+            val videos = result.getOrNull()?.list.orEmpty().ifEmpty {
+                engine.sourceRepository.getCategoryContent(site, "baby")
+                    .getOrNull()
+                    ?.list
+                    .orEmpty()
+            }.take(MAX_MEDIA_ITEMS).map { it.also { video -> video.siteKey = site.key } }
+            _uiState.update { it.copy(childEducationVideos = videos) }
+        }
+    }
+
     private fun observePopularSitePreference() {
         viewModelScope.launch {
             sourcePreference.popularSiteKey.drop(1).collect { siteKey ->
@@ -97,7 +114,8 @@ class HomeViewModel @Inject constructor(
     }
 
     private fun List<SiteConfig>.selectPopularSite(siteKey: String?): SiteConfig? {
-        return firstOrNull { it.key == siteKey } ?: firstOrNull()
+        val popularSites = filterNot { it.key == CHILD_EDUCATION_SITE_KEY }
+        return popularSites.firstOrNull { it.key == siteKey } ?: popularSites.firstOrNull()
     }
 
     private fun observeLocalLibrary() {
@@ -153,6 +171,7 @@ class HomeViewModel @Inject constructor(
 
     companion object {
         private const val MAX_MEDIA_ITEMS = 8
+        private const val CHILD_EDUCATION_SITE_KEY = "少儿教育"
     }
 }
 
@@ -161,6 +180,7 @@ data class HomeUiState(
     val errorMessage: String? = null,
     val sourceName: String = "",
     val popularVideos: List<VodInfo> = emptyList(),
+    val childEducationVideos: List<VodInfo> = emptyList(),
     val recentWatching: List<HomeMediaItem> = emptyList(),
     val favorites: List<HomeMediaItem> = emptyList(),
 )

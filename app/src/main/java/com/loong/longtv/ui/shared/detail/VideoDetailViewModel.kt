@@ -158,7 +158,11 @@ class VideoDetailViewModel @Inject constructor(
         playEpisode(playLine, episodeIndex, PlayRequestMode.KeepSelected)
     }
 
-    private fun playEpisode(playLine: PlayLine, episodeIndex: Int, mode: PlayRequestMode) {
+    private fun playEpisode(
+        playLine: PlayLine,
+        episodeIndex: Int,
+        mode: PlayRequestMode
+    ) {
         val state = _uiState.value
         val site = engine.currentConfig?.sites?.firstOrNull { it.key == state.siteKey } ?: return
         val detail = state.detail ?: return
@@ -384,7 +388,10 @@ class VideoDetailViewModel @Inject constructor(
         )
     }
 
-    private suspend fun applyPlayableCandidate(candidate: PlayCandidate, playableMedia: PlayableMedia) {
+    private suspend fun applyPlayableCandidate(
+        candidate: PlayCandidate,
+        playableMedia: PlayableMedia
+    ) {
         val episode = candidate.playLine.episodes.getOrNull(candidate.episodeIndex)
         _uiState.update {
             it.copy(
@@ -392,7 +399,7 @@ class VideoDetailViewModel @Inject constructor(
                 selectedSourceIndex = candidate.sourceIndex,
                 selectedEpisodeIndex = candidate.episodeIndex,
                 playableMedia = playableMedia,
-                resumePositionMs = if (episode != null) resolveResumePosition(candidate.playLine, episode) else 0,
+                resumePositionMs = if (episode != null) resolveResumePosition(candidate.playLine, episode) else 0L,
                 error = null
             )
         }

@@ -1,0 +1,42 @@
+{
+    "home": [
+        "宝宝巴士 儿歌 启蒙",
+        "幼儿启蒙 动画",
+        "儿童英语启蒙",
+        "儿童数学思维",
+        "儿童科普 动画",
+        "绘本故事 儿童"
+    ],
+    "classes": [
+        {
+            "type_id": "baby",
+            "type_name": "幼儿启蒙",
+            "keyword": "宝宝巴士 幼儿启蒙"
+        },
+        {
+            "type_id": "english",
+            "type_name": "英语启蒙",
+            "keyword": "儿童英语启蒙"
+        },
+        {
+            "type_id": "math",
+            "type_name": "数学思维",
+            "keyword": "儿童数学思维"
+        },
+        {
+            "type_id": "science",
+            "type_name": "科普百科",
+            "keyword": "儿童科普 动画"
+        },
+        {
+            "type_id": "story",
+            "type_name": "绘本故事",
+            "keyword": "绘本故事 儿童"
+        },
+        {
+            "type_id": "music",
+            "type_name": "儿歌音乐",
+            "keyword": "儿歌 儿童 音乐"
+        }
+    ]
+}

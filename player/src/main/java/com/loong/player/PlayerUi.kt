@@ -36,6 +36,7 @@ sealed interface PlayerCommand {
     data object TogglePlayPause : PlayerCommand
     data class SeekBy(val offsetMs: Long) : PlayerCommand
     data class SeekTo(val positionMs: Long) : PlayerCommand
+    data class SeekToAndPlay(val positionMs: Long) : PlayerCommand
     data class SetSpeed(val speed: Float) : PlayerCommand
     data class SetVolume(val volume: Float) : PlayerCommand
     data class SetMuted(val muted: Boolean) : PlayerCommand
@@ -75,6 +76,8 @@ class PlayerControlState(
     fun seekBy(offsetMs: Long) = dispatch(PlayerCommand.SeekBy(offsetMs))
 
     fun seekTo(positionMs: Long) = dispatch(PlayerCommand.SeekTo(positionMs))
+
+    fun seekToAndPlay(positionMs: Long) = dispatch(PlayerCommand.SeekToAndPlay(positionMs))
 
     fun setSpeed(speed: Float) = dispatch(PlayerCommand.SetSpeed(speed.coerceIn(0.25f, 4f)))
 

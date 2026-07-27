@@ -85,7 +85,7 @@ class PopularViewModel @Inject constructor(
             val source = sourcePreference.load() ?: DefaultSources.default
             val result = engine.start(source)
             if (result.isSuccess) {
-                val sites = result.getOrThrow().sites.filter { it.isSpiderSite() }
+                val sites = result.getOrThrow().sites.filter { it.isSpiderSite() && it.key != CHILD_EDUCATION_SITE_KEY }
                 val site = sites.selectPopularSite(sourcePreference.loadPopularSiteKey())
                 if (site == null) {
                     _uiState.update {
@@ -217,6 +217,7 @@ class PopularViewModel @Inject constructor(
 
     companion object {
         private const val HOME_TAB_ID = "__home__"
+        private const val CHILD_EDUCATION_SITE_KEY = "少儿教育"
     }
 }
 

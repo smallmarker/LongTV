@@ -68,6 +68,7 @@ import com.loong.longtv.ui.theme.AppThemeTokens
 import com.loong.longtv.ui.theme.BrandAccent
 import com.loong.longtv.ui.theme.BrandPrimary
 import com.loong.longtv.utils.extensions.prefetchSmartImages
+import com.loong.longtv.engine.source.model.PosterImage
 
 @OptIn(ExperimentalTvMaterial3Api::class)
 @Composable
@@ -148,17 +149,29 @@ internal fun HomeScreenContent(
             }
         )
 
-        MediaRailSection(
-            title = "我的收藏",
-            actionText = "更多 >",
-            emptyText = "还没有收藏内容",
-            items = uiState.favorites,
+        ChildEducationRailSection(
+            items = uiState.childEducationVideos,
             isTv = isTv,
-            onMore = { navController.navigate(Screen.Favorite.route) },
-            onItemClick = { item ->
-                navController.navigate(Screen.VideoDetail.createRoute(item.siteKey, item.videoId))
+            onMore = { navController.navigate(Screen.ChildEducation.route) },
+            onItemClick = { video ->
+                navController.navigate(Screen.VideoDetail.createRoute(video.siteKey, video.id))
             }
         )
+
+        // TV 首页不展示空收藏模块；手机端保留原有的空状态提示。
+        if (!isTv || uiState.favorites.isNotEmpty()) {
+            MediaRailSection(
+                title = "我的收藏",
+                actionText = "更多 >",
+                emptyText = "还没有收藏内容",
+                items = uiState.favorites,
+                isTv = isTv,
+                onMore = { navController.navigate(Screen.Favorite.route) },
+                onItemClick = { item ->
+                    navController.navigate(Screen.VideoDetail.createRoute(item.siteKey, item.videoId))
+                }
+            )
+        }
     }
 }
 
@@ -404,8 +417,8 @@ private fun PopularRailSection(
     LaunchedEffect(items) {
         prefetchSmartImages(
             context = context,
-            models = items.map { it.pic },
-            limit = if (isTv) 16 else 10
+            models = items.map { it.poster },
+            limit = if (isTv) 8 else 6
         )
     }
 
@@ -441,6 +454,53 @@ private fun PopularRailSection(
 }
 
 @Composable
+private fun ChildEducationRailSection(
+    items: List<VodInfo>,
+    isTv: Boolean,
+    onMore: () -> Unit,
+    onItemClick: (VodInfo) -> Unit,
+) {
+    val context = LocalContext.current
+    LaunchedEffect(items) {
+        prefetchSmartImages(
+            context = context,
+            models = items.map { it.poster },
+            limit = if (isTv) 8 else 6
+        )
+    }
+
+    Column {
+        HomeSectionHeader(
+            title = "少儿教育",
+            actionText = "更多 >",
+            isTv = isTv,
+            onAction = onMore
+        )
+
+        if (items.isEmpty()) {
+            EmptyLine(text = "暂无少儿教育内容", isTv = isTv)
+            return@Column
+        }
+
+        LazyRow(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(top = 12.dp),
+            horizontalArrangement = Arrangement.spacedBy(if (isTv) 18.dp else 12.dp),
+            contentPadding = PaddingValues(horizontal = if (isTv) 12.dp else 2.dp, vertical = if (isTv) 6.dp else 0.dp)
+        ) {
+            items(items, key = { "${it.siteKey}:${it.id}:${it.name}" }) { video ->
+                TvSurface(onClick = { onItemClick(video) }) {
+                    Box(modifier = Modifier.width(if (isTv) AppThemeTokens.TvPosterRailWidth else AppThemeTokens.PhonePosterRailWidth)) {
+                        VideoCard(video = video)
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
 private fun MediaRailSection(
     title: String,
     actionText: String,
@@ -454,8 +514,8 @@ private fun MediaRailSection(
     LaunchedEffect(items) {
         prefetchSmartImages(
             context = context,
-            models = items.map { it.cover },
-            limit = if (isTv) 16 else 10
+            models = items.map { PosterImage(it.cover) },
+            limit = if (isTv) 8 else 6
         )
     }
 

@@ -423,8 +423,7 @@ private fun TvHistoryPosterCard(
                     .fillMaxWidth()
                     .aspectRatio(VideoPosterAspectRatio)
                     .clip(AppThemeTokens.cardShape()),
-                contentScale = androidx.compose.ui.layout.ContentScale.Crop,
-                fallbackText = item.title.ifBlank { "历史记录" }
+                contentScale = androidx.compose.ui.layout.ContentScale.Crop
             )
 
             if (editMode) {

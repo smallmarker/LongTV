@@ -2,14 +2,13 @@
     "spider": "",
     "lives": [
         {
-            "name": "vbskycn IPTV4",
-            "type": 1,
-            "url": "https://live.zbds.top/tv/iptv4.m3u"
-        },
-        {
-            "name": "vbskycn IPTV4 GitHub备用",
-            "type": 1,
-            "url": "https://raw.githubusercontent.com/vbskycn/iptv/refs/heads/master/tv/iptv4.m3u"
+            "name": "线路①",
+            "type": 0,
+            "url": "http://rihou.cc:567/gggg.nzk",
+            "playerType": 2,
+            "ua": "okhttp/3",
+            "epg": "https://epg.112114.eu.org/?ch={name}&date={date}",
+            "logo": "https://epg.112114.eu.org/logo/{name}.png"
         }
     ],
     "sites": [
@@ -76,6 +75,23 @@
                     "爱情片",
                     "喜剧片"
                 ]
+            }
+        },
+        {
+            "key": "少儿教育",
+            "name": "📖少儿🔹教育",
+            "type": 3,
+            "api": "csp_Bili",
+            "searchable": 0,
+            "quickSearch": 0,
+            "filterable": 1,
+            "ext": {
+                "json": "./json/少儿教育.json",
+                "cookie": "http://127.0.0.1:9978/file/TVBox/bili_cookie.txt"
+            },
+            "style": {
+                "type": "rect",
+                "ratio": 1.597
             }
         }
     ]

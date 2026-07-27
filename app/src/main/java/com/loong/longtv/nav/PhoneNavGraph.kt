@@ -16,6 +16,7 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import com.google.gson.Gson
+import com.loong.longtv.ui.phone.child.ChildEducationPhoneScreen
 import com.loong.longtv.ui.phone.detail.PhoneFullscreenPlayerScreen
 import com.loong.longtv.ui.phone.detail.VideoDetailPhoneScreen
 import com.loong.longtv.ui.phone.favorite.FavoritePhoneScreen
@@ -53,6 +54,10 @@ fun PhoneNavGraph() {
 
         composable(Screen.Popular.route) {
             PopularPhoneScreen(navController = navController)
+        }
+
+        composable(Screen.ChildEducation.route) {
+            ChildEducationPhoneScreen(navController = navController)
         }
 
         composable(Screen.Live.route) {

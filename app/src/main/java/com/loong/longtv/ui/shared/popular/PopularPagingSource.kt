@@ -12,13 +12,22 @@ class PopularPagingSource(
     private val tab: Category,
     private val filters: Map<String, String>,
     private val engine: TvBoxEngine,
-    private val homeTabId: String
+    private val homeTabId: String,
+    private val useHomeVideoContent: Boolean = false
 ) : PagingSource<Int, VodInfo>() {
 
     override suspend fun load(params: LoadParams<Int>): LoadResult<Int, VodInfo> {
         val page = params.key ?: 1
-        val categoryId = if (tab.id == homeTabId) "0" else tab.id
-        val result = engine.sourceRepository.getCategoryContent(site, categoryId, page, HashMap(filters))
+        val result = if (tab.id == homeTabId && useHomeVideoContent) {
+            if (page == 1) {
+                engine.sourceRepository.getHomeVideos(site)
+            } else {
+                return LoadResult.Page(data = emptyList(), prevKey = page - 1, nextKey = null)
+            }
+        } else {
+            val categoryId = if (tab.id == homeTabId) "0" else tab.id
+            engine.sourceRepository.getCategoryContent(site, categoryId, page, HashMap(filters))
+        }
 
         return if (result.isSuccess) {
             val content = result.getOrThrow()

@@ -1,18 +1,28 @@
 package com.loong.longtv.engine.live
 
+import android.util.Log
 import com.github.catvod.net.OkHttp
 import com.loong.longtv.engine.source.model.LiveChannel
 import com.loong.longtv.engine.source.model.LiveConfig
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.withContext
+import okhttp3.Headers
+import java.util.concurrent.TimeUnit
 
 class LiveSpider {
 
     suspend fun loadChannels(sources: List<LiveConfig>): Result<List<LiveChannel>> = withContext(Dispatchers.IO) {
         runCatching {
-            val channels = sources.flatMap { source ->
-                fetchSource(source).getOrDefault(emptyList())
-            }.distinctBy { "${it.name.trim()}|${it.url.trim()}" }
+            val channels = sources
+                .filter { it.url.isNotBlank() }
+                .map { source ->
+                    async { fetchSource(source).getOrDefault(emptyList()) }
+                }
+                .awaitAll()
+                .flatten()
+                .distinctBy { "${it.name.trim()}|${it.url.trim()}" }
 
             if (channels.isEmpty() && sources.isNotEmpty()) {
                 error("没有获取到可用直播频道")
@@ -22,13 +32,34 @@ class LiveSpider {
     }
 
     private fun fetchSource(source: LiveConfig): Result<List<LiveChannel>> = runCatching {
-        val body = OkHttp.string(source.url)
-        if (body.isBlank()) return@runCatching emptyList()
+        val timeoutMs = source.timeout.coerceIn(3, 30) * 1000
+        val headers = Headers.Builder()
+            .apply { source.ua?.takeIf { it.isNotBlank() }?.let { add("User-Agent", it) } }
+            .build()
+        val client = OkHttp.client(timeoutMs)
+            .newBuilder()
+            .callTimeout(timeoutMs.toLong(), TimeUnit.MILLISECONDS)
+            .build()
+        val body = OkHttp.newCall(client, source.url, headers)
+            .execute()
+            .use { response -> if (response.isSuccessful) response.body?.string().orEmpty() else "" }
+        if (body.isBlank()) {
+            Log.w(TAG, "source=${source.name} returned empty body url=${source.url}")
+            return@runCatching emptyList()
+        }
 
-        when {
+        val channels = when {
             body.contains("#EXTM3U", ignoreCase = true) -> M3uLiveParser.parse(body, source.name)
             else -> TxtLiveParser.parse(body, source.name)
         }
+        Log.d(TAG, "source=${source.name} channels=${channels.size} bytes=${body.length}")
+        channels
+    }.onFailure { error ->
+        Log.w(TAG, "source=${source.name} failed url=${source.url}: ${error.message}", error)
+    }
+
+    companion object {
+        private const val TAG = "LiveSpider"
     }
 }
 
@@ -105,7 +136,7 @@ object TxtLiveParser {
                 val value = parts[1]
                 if (value.equals("#genre#", ignoreCase = true)) {
                     group = name
-                } else if (value.isPlayableUrl()) {
+                } else if (value.isDirectStreamUrl() && !isTxtPlaceholder(name, value)) {
                     channels += LiveChannel(
                         name = name,
                         url = value,
@@ -119,8 +150,25 @@ object TxtLiveParser {
     }
 }
 
+private fun isTxtPlaceholder(name: String, url: String): Boolean {
+    val normalizedUrl = url.trimEnd('/')
+    return normalizedUrl.endsWith("/tv/t", ignoreCase = true) ||
+        normalizedUrl.endsWith("/tv/v", ignoreCase = true) ||
+        name.contains("⬇") ||
+        Regex("""^\d{1,2}:\d{2}.*[🆚VS]""").containsMatchIn(name)
+}
+
 private fun String.isPlayableUrl(): Boolean {
     return startsWith("http://", ignoreCase = true) || startsWith("https://", ignoreCase = true)
+}
+
+private fun String.isDirectStreamUrl(): Boolean {
+    if (!isPlayableUrl()) return false
+    val path = substringBefore("?").substringBefore("#").lowercase()
+    return path.endsWith(".m3u8") ||
+        path.endsWith(".flv") ||
+        path.endsWith(".mp4") ||
+        path.endsWith(".ts")
 }
 
 private fun String.channelNameFromUrl(): String {

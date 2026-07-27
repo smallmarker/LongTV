@@ -14,6 +14,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
+import androidx.compose.foundation.lazy.grid.rememberLazyGridState
 import androidx.compose.foundation.lazy.items
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -23,6 +24,8 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
@@ -61,7 +64,10 @@ internal fun SearchResultContent(
     compact: Boolean,
     phoneLayout: Boolean,
     onRetry: () -> Unit,
-    onSelectCategory: (String) -> Unit
+    onSelectCategory: (String) -> Unit,
+    restoreFocusKey: String? = null,
+    onVideoClick: (com.loong.longtv.engine.source.model.VodInfo) -> Unit = {},
+    onFocusRestored: () -> Unit = {}
 ) {
     if (!phoneLayout) {
         SearchHeader(
@@ -100,7 +106,10 @@ internal fun SearchResultContent(
             modifier = Modifier.fillMaxSize(),
             videos = videos,
             navigator = navigator,
-            phoneLayout = phoneLayout
+            phoneLayout = phoneLayout,
+            restoreFocusKey = restoreFocusKey,
+            onVideoClick = onVideoClick,
+            onFocusRestored = onFocusRestored
         )
     } else {
         Row(horizontalArrangement = Arrangement.spacedBy(20.dp)) {
@@ -130,7 +139,10 @@ internal fun SearchResultContent(
                 modifier = Modifier.weight(1f),
                 videos = videos,
                 navigator = navigator,
-                phoneLayout = false
+                phoneLayout = false,
+                restoreFocusKey = restoreFocusKey,
+                onVideoClick = onVideoClick,
+                onFocusRestored = onFocusRestored
             )
         }
     }
@@ -141,30 +153,56 @@ internal fun SearchResultGrid(
     modifier: Modifier,
     videos: List<com.loong.longtv.engine.source.model.VodInfo>,
     navigator: NavController,
-    phoneLayout: Boolean
+    phoneLayout: Boolean,
+    restoreFocusKey: String? = null,
+    onVideoClick: (com.loong.longtv.engine.source.model.VodInfo) -> Unit = {},
+    onFocusRestored: () -> Unit = {}
 ) {
     val context = LocalContext.current
+    val gridState = rememberLazyGridState()
+    val restoreIndex = remember(videos, restoreFocusKey) {
+        videos.indexOfFirst { it.searchResultFocusKey() == restoreFocusKey }
+    }
     LaunchedEffect(videos) {
         prefetchSmartImages(
             context = context,
-            models = videos.map { it.pic },
-            limit = if (phoneLayout) 18 else 36
+            models = videos.map { it.poster },
+            limit = if (phoneLayout) 8 else 12
         )
+    }
+    LaunchedEffect(restoreFocusKey, restoreIndex, phoneLayout) {
+        if (!phoneLayout && restoreIndex >= 0) {
+            gridState.scrollToItem(restoreIndex)
+        }
     }
 
     LazyVerticalGrid(
         modifier = modifier,
+        state = gridState,
         columns = if (phoneLayout) GridCells.Fixed(2) else GridCells.Adaptive(150.dp),
-        contentPadding = PaddingValues(bottom = if (phoneLayout) 28.dp else 20.dp),
+        contentPadding = PaddingValues(
+            top = if (phoneLayout) 0.dp else 10.dp,
+            bottom = if (phoneLayout) 28.dp else 20.dp
+        ),
         verticalArrangement = Arrangement.spacedBy(if (phoneLayout) 12.dp else 16.dp),
         horizontalArrangement = Arrangement.spacedBy(if (phoneLayout) 12.dp else 16.dp)
     ) {
-        items(videos) { video ->
+        items(videos, key = { it.searchResultFocusKey() }) { video ->
+            val focusRequester = remember { FocusRequester() }
+            val shouldRestoreFocus = !phoneLayout && video.searchResultFocusKey() == restoreFocusKey
+            LaunchedEffect(shouldRestoreFocus) {
+                if (shouldRestoreFocus) {
+                    focusRequester.requestFocus()
+                    onFocusRestored()
+                }
+            }
             TvSurface(
+                modifier = if (shouldRestoreFocus) Modifier.focusRequester(focusRequester) else Modifier,
                 onClick = {
                     val siteKey = video.siteKey
                     val videoId = video.id
                     if (siteKey.isNotBlank() && videoId.isNotBlank()) {
+                        onVideoClick(video)
                         navigator.navigate(VideoDetail.createRoute(siteKey, videoId))
                     }
                 }
@@ -174,6 +212,9 @@ internal fun SearchResultGrid(
         }
     }
 }
+
+private fun com.loong.longtv.engine.source.model.VodInfo.searchResultFocusKey(): String =
+    "$siteKey:$id"
 
 @Composable
 internal fun SearchHeader(

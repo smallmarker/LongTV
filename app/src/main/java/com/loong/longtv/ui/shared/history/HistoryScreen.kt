@@ -104,8 +104,7 @@ internal fun HistoryCard(
                         .width(116.dp)
                         .aspectRatio(2f / 3f)
                         .clip(AppThemeTokens.cardShape()),
-                    contentScale = androidx.compose.ui.layout.ContentScale.Crop,
-                    fallbackText = item.title.ifBlank { "历史记录" }
+                    contentScale = androidx.compose.ui.layout.ContentScale.Crop
                 )
                 Column(modifier = Modifier.weight(1f)) {
                     Text(text = item.title, color = AppTextPrimary, fontSize = 16.sp, maxLines = 2, overflow = TextOverflow.Ellipsis)
@@ -138,8 +137,7 @@ internal fun HistoryCard(
                     modifier = Modifier
                         .fillMaxWidth()
                         .clip(AppThemeTokens.cardShape()),
-                    contentScale = androidx.compose.ui.layout.ContentScale.Crop,
-                    fallbackText = item.title.ifBlank { "历史记录" }
+                    contentScale = androidx.compose.ui.layout.ContentScale.Crop
                 )
                 Column {
                     Text(text = item.title, color = AppTextPrimary, fontSize = 18.sp, maxLines = 2, overflow = TextOverflow.Ellipsis)
@@ -172,8 +170,7 @@ internal fun HistoryCard(
                         .padding(4.dp)
                         .width(160.dp)
                         .clip(AppThemeTokens.cardShape()),
-                    contentScale = androidx.compose.ui.layout.ContentScale.Crop,
-                    fallbackText = item.title.ifBlank { "历史记录" }
+                    contentScale = androidx.compose.ui.layout.ContentScale.Crop
                 )
                 Column(modifier = Modifier.weight(1f)) {
                     Text(text = item.title, color = AppTextPrimary, fontSize = 18.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)

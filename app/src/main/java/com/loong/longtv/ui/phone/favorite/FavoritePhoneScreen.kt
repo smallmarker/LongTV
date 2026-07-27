@@ -375,8 +375,7 @@ private fun FavoritePhoneCard(
                 .width(104.dp)
                 .aspectRatio(16f / 9f)
                 .clip(AppThemeTokens.cardShape()),
-            contentScale = ContentScale.Crop,
-            fallbackText = item.title.ifBlank { "收藏内容" }
+            contentScale = ContentScale.Crop
         )
 
         Column(

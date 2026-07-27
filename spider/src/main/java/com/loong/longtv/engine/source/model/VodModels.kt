@@ -85,6 +85,13 @@ data class VodInfo(
     var siteKey: String = ""
 
     /**
+     * 运行时生成的封面请求。Spider 协议只传 vod_pic 字符串，因此请求头不会进入
+     * JSON 或历史记录；由 SourceRepository 在拿到站点上下文后补齐。
+     */
+    @Transient
+    var poster: PosterImage = PosterImage(pic)
+
+    /**
      * 解析播放线路
      * playFrom: "线路1$$$线路2"
      * playUrl:  "第1集$url1#第2集$url2$$$第1集$url3#第2集$url4"
@@ -114,6 +121,12 @@ data class VodInfo(
         }
     }
 }
+
+/** 图片地址和它所需的防盗链请求头。 */
+data class PosterImage(
+    val url: String = "",
+    val headers: Map<String, String> = emptyMap()
+)
 
 /** 播放线路 */
 data class PlayLine(

@@ -325,8 +325,7 @@ private fun HistoryPhoneCard(
                 .width(84.dp)
                 .aspectRatio(2f / 3f)
                 .clip(AppThemeTokens.cardShape()),
-            contentScale = androidx.compose.ui.layout.ContentScale.Crop,
-            fallbackText = item.title.ifBlank { "历史记录" }
+            contentScale = androidx.compose.ui.layout.ContentScale.Crop
         )
 
         Column(
