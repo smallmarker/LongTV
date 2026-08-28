@@ -7,6 +7,7 @@ import com.loong.longtv.data.cache.CacheStorage
 import com.loong.longtv.data.SourcePreference
 import com.loong.longtv.engine.TvBoxEngine
 import com.loong.longtv.engine.source.model.SiteConfig
+import com.loong.longtv.ui.shared.section.ContentSection
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.Dispatchers
@@ -40,7 +41,7 @@ class SettingsViewModel @Inject constructor(
         val config = engine.currentConfig
         _uiState.value = SettingsUiState(
             popularSiteKey = sourcePreference.loadPopularSiteKey(),
-            sites = config?.sites?.filter { it.isSpiderSite() && it.key != CHILD_EDUCATION_SITE_KEY } ?: emptyList()
+            sites = config?.sites?.filter { it.isSpiderSite() && it.key !in ContentSection.nonPopularSiteKeys } ?: emptyList()
         )
         viewModelScope.launch(Dispatchers.IO) {
             CacheStorage.enforceBudget(context)
@@ -50,9 +51,5 @@ class SettingsViewModel @Inject constructor(
     fun selectPopularSite(siteKey: String) {
         sourcePreference.savePopularSiteKey(siteKey)
         _uiState.value = _uiState.value.copy(popularSiteKey = siteKey, error = null)
-    }
-
-    companion object {
-        private const val CHILD_EDUCATION_SITE_KEY = "少儿教育"
     }
 }

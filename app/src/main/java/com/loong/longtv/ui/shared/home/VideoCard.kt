@@ -24,7 +24,6 @@ import com.loong.longtv.ui.common.currentDeviceClass
 import com.loong.longtv.ui.shared.VideoPosterAspectRatio
 import com.loong.longtv.ui.shared.widgets.SmartAsyncImage
 import com.loong.longtv.ui.theme.AppThemeTokens
-import com.loong.longtv.ui.theme.BrandPrimary
 
 @Composable
 fun VideoCard(
@@ -33,7 +32,6 @@ fun VideoCard(
     val isTv = currentDeviceClass() == DeviceClass.TV
     val title = video.displayTitle()
     val score = video.displayScore()
-    val badgeText = video.displayBadge()
     val shape = AppThemeTokens.cardShape()
 
     Box(
@@ -69,19 +67,6 @@ fun VideoCard(
                 modifier = Modifier.fillMaxWidth()
             )
         }
-        if (badgeText.isNotBlank()) {
-            Text(
-                text = badgeText,
-                color = Color(0xFF0C1522),
-                fontSize = if (isTv) 11.sp else 10.sp,
-                fontWeight = FontWeight.SemiBold,
-                modifier = Modifier
-                    .padding(10.dp)
-                    .clip(RoundedCornerShape(999.dp))
-                    .background(BrandPrimary)
-                    .padding(horizontal = if (isTv) 10.dp else 9.dp, vertical = if (isTv) 5.dp else 4.dp)
-            )
-        }
         if (score != null) {
             Text(
                 text = score,
@@ -89,7 +74,7 @@ fun VideoCard(
                 fontSize = if (isTv) 11.sp else 10.sp,
                 fontWeight = FontWeight.Bold,
                 modifier = Modifier
-                    .align(androidx.compose.ui.Alignment.TopEnd)
+                    .align(androidx.compose.ui.Alignment.TopStart)
                     .padding(10.dp)
                     .clip(RoundedCornerShape(999.dp))
                     .background(Color.Black.copy(alpha = 0.72f))
@@ -104,12 +89,6 @@ private fun VodInfo.displayTitle(): String {
         .map { it.normalizedDisplayText() }
         .firstOrNull { it.isNotBlank() }
         ?: typeName.ifBlank { "未知标题" }
-}
-
-private fun VodInfo.displayBadge(): String {
-    return remarks.normalizedDisplayText()
-        .takeUnless { it.extractScoreText() != null }
-        .orEmpty()
 }
 
 private fun String?.normalizedDisplayText(): String {

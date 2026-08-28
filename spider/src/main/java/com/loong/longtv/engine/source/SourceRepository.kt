@@ -150,7 +150,7 @@ class SourceRepository(
                 "User-Agent" to POSTER_USER_AGENT
             )
         }
-        if (spiderClassName() !in setOf("TianTian", "Xmfyy")) return emptyMap()
+        if (spiderClassName() != "Xmfyy") return emptyMap()
         val baseUrl = baseUrl()
         if (baseUrl.isBlank()) return emptyMap()
         return mapOf(

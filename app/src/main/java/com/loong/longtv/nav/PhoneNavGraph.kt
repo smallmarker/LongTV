@@ -26,6 +26,7 @@ import com.loong.longtv.ui.phone.live.LivePhoneScreen
 import com.loong.longtv.ui.phone.popular.PopularPhoneScreen
 import com.loong.longtv.ui.phone.search.SearchPhoneScreen
 import com.loong.longtv.ui.phone.search.SearchResultPhoneScreen
+import com.loong.longtv.ui.phone.section.ContentSectionPhoneScreen
 import com.loong.longtv.ui.phone.settings.SettingsPhoneScreen
 
 @Composable
@@ -58,6 +59,13 @@ fun PhoneNavGraph() {
 
         composable(Screen.ChildEducation.route) {
             ChildEducationPhoneScreen(navController = navController)
+        }
+
+        composable(
+            Screen.ContentSection.route,
+            arguments = listOf(navArgument("sectionId") { type = NavType.StringType })
+        ) {
+            ContentSectionPhoneScreen(navController = navController)
         }
 
         composable(Screen.Live.route) {

@@ -51,14 +51,18 @@ class Bili : Spider() {
     }
 
     override fun homeContent(filter: Boolean): String {
-        return gson.toJson(
-            mapOf(
-                "class" to config.classes.map { item ->
-                    mapOf("type_id" to item.id, "type_name" to item.name)
-                },
-                "filters" to emptyMap<String, Any>()
+        val root = JSONObject()
+        val classes = JSONArray()
+        config.classes.forEach { item ->
+            classes.put(
+                JSONObject()
+                    .put("type_id", item.id)
+                    .put("type_name", item.name)
             )
-        )
+        }
+        root.put("class", classes)
+        root.put("filters", config.filters)
+        return root.toString()
     }
 
     override fun homeVideoContent(): String {
@@ -75,8 +79,9 @@ class Bili : Spider() {
         extend: HashMap<String, String>
     ): String {
         val page = pg.toIntOrNull()?.takeIf { it > 0 } ?: 1
-        val keyword = config.classes.firstOrNull { it.id == tid }?.keyword ?: tid
-        val items = searchVideos(keyword, page, PAGE_LIMIT)
+        val filterKeyword = extend["tid"]?.takeIf { it.isNotBlank() && it != "0" }
+        val keyword = filterKeyword ?: config.classes.firstOrNull { it.id == tid }?.keyword ?: tid
+        val items = searchVideos(keyword, page, PAGE_LIMIT, extend)
         return listResult(page, if (items.isEmpty()) page else page + 1, items.size, items)
     }
 
@@ -139,10 +144,26 @@ class Bili : Spider() {
         return if (playUrl.isNotBlank()) playerResult(playUrl, headers = headers) else playerResult(id, parse = 1)
     }
 
-    private fun searchVideos(keyword: String, page: Int, limit: Int): List<Map<String, String>> {
+    private fun searchVideos(
+        keyword: String,
+        page: Int,
+        limit: Int,
+        filters: Map<String, String> = emptyMap()
+    ): List<Map<String, String>> {
         if (keyword.isBlank()) return emptyList()
-        val url = "https://api.bilibili.com/x/web-interface/search/type" +
-            "?search_type=video&keyword=${urlEncode(keyword)}&page=$page&page_size=$limit"
+        val params = mutableListOf(
+            "search_type=video",
+            "keyword=${urlEncode(keyword)}",
+            "page=$page",
+            "page_size=$limit"
+        )
+        filters["order"]?.takeIf { it.isNotBlank() && it != "0" }?.let {
+            params.add("order=${urlEncode(it)}")
+        }
+        filters["duration"]?.takeIf { it.isNotBlank() && it != "0" }?.let {
+            params.add("duration=${urlEncode(it)}")
+        }
+        val url = "https://api.bilibili.com/x/web-interface/search/type?${params.joinToString("&")}"
         val result = getJson(url)?.optJSONObject("data")?.optJSONArray("result") ?: return emptyList()
         val items = mutableListOf<Map<String, String>>()
         for (i in 0 until result.length()) {
@@ -273,15 +294,19 @@ class Bili : Spider() {
 
     private data class BiliConfig(
         val home: List<String>,
-        val classes: List<BiliClass>
+        val classes: List<BiliClass>,
+        val filters: JSONObject = JSONObject()
     ) {
         companion object {
             fun from(root: JSONObject): BiliConfig {
                 val home = root.optJSONArray("home").toStringList()
-                val classes = root.optJSONArray("classes").toClassList()
+                val classes = root.optJSONArray("classes").toClassList().ifEmpty {
+                    root.optJSONArray("class").toClassList()
+                }
                 return BiliConfig(
                     home = home.ifEmpty { classes.map { it.keyword } },
-                    classes = classes.ifEmpty { default().classes }
+                    classes = classes.ifEmpty { default().classes },
+                    filters = root.optJSONObject("filters") ?: JSONObject()
                 )
             }
 
@@ -310,7 +335,7 @@ class Bili : Spider() {
                     val item = optJSONObject(i) ?: continue
                     val id = item.optString("type_id").ifBlank { item.optString("id") }
                     val name = item.optString("type_name").ifBlank { item.optString("name") }
-                    val keyword = item.optString("keyword").ifBlank { name }
+                    val keyword = item.optString("keyword").ifBlank { id.ifBlank { name } }
                     if (id.isNotBlank() && name.isNotBlank()) values.add(BiliClass(id, name, keyword))
                 }
                 return values

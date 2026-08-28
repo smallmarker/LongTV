@@ -7,6 +7,9 @@ sealed class Screen(val route: String) {
     object Home : Screen("home")
     object Popular : Screen("popular")
     object ChildEducation : Screen("child_education")
+    object ContentSection : Screen("content_section/{sectionId}") {
+        fun createRoute(sectionId: String) = "content_section/${Uri.encode(sectionId)}"
+    }
     object Live : Screen("live")
     object Search : Screen("search")
     object History : Screen("history")

@@ -18,6 +18,7 @@ import com.loong.longtv.ui.tv.live.LiveTvScreen
 import com.loong.longtv.ui.tv.popular.PopularTvScreen
 import com.loong.longtv.ui.tv.search.SearchResultTvScreen
 import com.loong.longtv.ui.tv.search.SearchTvScreen
+import com.loong.longtv.ui.tv.section.ContentSectionTvScreen
 import com.loong.longtv.ui.tv.settings.SettingsTvScreen
 
 @Composable
@@ -35,6 +36,13 @@ fun TvNavGraph() {
 
         composable(Screen.ChildEducation.route) {
             ChildEducationTvScreen(navController = navController)
+        }
+
+        composable(
+            Screen.ContentSection.route,
+            arguments = listOf(navArgument("sectionId") { type = NavType.StringType })
+        ) {
+            ContentSectionTvScreen(navController = navController)
         }
 
         composable(Screen.Live.route) {

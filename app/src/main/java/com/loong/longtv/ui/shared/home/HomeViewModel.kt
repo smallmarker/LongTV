@@ -11,6 +11,7 @@ import com.loong.longtv.di.DefaultSources
 import com.loong.longtv.engine.TvBoxEngine
 import com.loong.longtv.engine.source.model.SiteConfig
 import com.loong.longtv.engine.source.model.VodInfo
+import com.loong.longtv.ui.shared.section.ContentSection
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -50,23 +51,44 @@ class HomeViewModel @Inject constructor(
                 val sites = result.getOrThrow().sites.filter { it.isSpiderSite() }
                 val site = sites.selectPopularSite(sourcePreference.loadPopularSiteKey())
                 val childEducationSite = sites.firstOrNull { it.key == CHILD_EDUCATION_SITE_KEY }
+                val courseEducationSite = sites.firstOrNull { it.key == ContentSection.CourseEducation.siteKey }
+                val musicConcertSite = sites.firstOrNull { it.key == ContentSection.MusicConcert.siteKey }
+                val audioBookSite = sites.firstOrNull { it.key == ContentSection.AudioBook.siteKey }
                 _uiState.update { state ->
                     state.copy(
                         loading = false,
                         sourceName = site?.name.orEmpty(),
+                        popularVideosRequireSearch = site?.api == DOUBAN_API,
                         popularVideos = emptyList(),
                         childEducationVideos = emptyList(),
+                        courseEducationVideos = emptyList(),
+                        musicConcertVideos = emptyList(),
+                        audioBookVideos = emptyList(),
                         errorMessage = null,
                     )
                 }
                 site?.let { loadPopularVideos(it) }
-                childEducationSite?.let { loadChildEducationVideos(it) }
+                childEducationSite?.let {
+                    loadSectionVideos(it) { state, videos -> state.copy(childEducationVideos = videos) }
+                }
+                courseEducationSite?.let {
+                    loadSectionVideos(it) { state, videos -> state.copy(courseEducationVideos = videos) }
+                }
+                musicConcertSite?.let {
+                    loadSectionVideos(it) { state, videos -> state.copy(musicConcertVideos = videos) }
+                }
+                audioBookSite?.let {
+                    loadSectionVideos(it) { state, videos -> state.copy(audioBookVideos = videos) }
+                }
             } else {
                 _uiState.update { state ->
                     state.copy(
                         loading = false,
                         popularVideos = emptyList(),
                         childEducationVideos = emptyList(),
+                        courseEducationVideos = emptyList(),
+                        musicConcertVideos = emptyList(),
+                        audioBookVideos = emptyList(),
                         errorMessage = "加载播放源失败: ${result.exceptionOrNull()?.message.orEmpty()}",
                     )
                 }
@@ -87,16 +109,29 @@ class HomeViewModel @Inject constructor(
         }
     }
 
-    private fun loadChildEducationVideos(site: SiteConfig) {
+    private fun loadSectionVideos(
+        site: SiteConfig,
+        applyVideos: (HomeUiState, List<VodInfo>) -> HomeUiState
+    ) {
         viewModelScope.launch {
             val result = engine.sourceRepository.getHomeVideos(site)
             val videos = result.getOrNull()?.list.orEmpty().ifEmpty {
-                engine.sourceRepository.getCategoryContent(site, "baby")
+                val firstCategoryId = engine.sourceRepository.getHomeContent(site)
+                    .getOrNull()
+                    ?.categories
+                    ?.firstOrNull()
+                    ?.id
+                    .orEmpty()
+                if (firstCategoryId.isBlank()) {
+                    emptyList()
+                } else {
+                    engine.sourceRepository.getCategoryContent(site, firstCategoryId)
                     .getOrNull()
                     ?.list
                     .orEmpty()
+                }
             }.take(MAX_MEDIA_ITEMS).map { it.also { video -> video.siteKey = site.key } }
-            _uiState.update { it.copy(childEducationVideos = videos) }
+            _uiState.update { applyVideos(it, videos) }
         }
     }
 
@@ -107,14 +142,20 @@ class HomeViewModel @Inject constructor(
                     ?.filter { it.isSpiderSite() }
                     ?.selectPopularSite(siteKey)
                     ?: return@collect
-                _uiState.update { it.copy(popularVideos = emptyList(), sourceName = site.name) }
+                _uiState.update {
+                    it.copy(
+                        popularVideos = emptyList(),
+                        sourceName = site.name,
+                        popularVideosRequireSearch = site.api == DOUBAN_API
+                    )
+                }
                 loadPopularVideos(site)
             }
         }
     }
 
     private fun List<SiteConfig>.selectPopularSite(siteKey: String?): SiteConfig? {
-        val popularSites = filterNot { it.key == CHILD_EDUCATION_SITE_KEY }
+        val popularSites = filterNot { it.key in ContentSection.nonPopularSiteKeys }
         return popularSites.firstOrNull { it.key == siteKey } ?: popularSites.firstOrNull()
     }
 
@@ -172,6 +213,7 @@ class HomeViewModel @Inject constructor(
     companion object {
         private const val MAX_MEDIA_ITEMS = 8
         private const val CHILD_EDUCATION_SITE_KEY = "少儿教育"
+        private const val DOUBAN_API = "csp_Douban"
     }
 }
 
@@ -179,8 +221,12 @@ data class HomeUiState(
     val loading: Boolean = false,
     val errorMessage: String? = null,
     val sourceName: String = "",
+    val popularVideosRequireSearch: Boolean = false,
     val popularVideos: List<VodInfo> = emptyList(),
     val childEducationVideos: List<VodInfo> = emptyList(),
+    val courseEducationVideos: List<VodInfo> = emptyList(),
+    val musicConcertVideos: List<VodInfo> = emptyList(),
+    val audioBookVideos: List<VodInfo> = emptyList(),
     val recentWatching: List<HomeMediaItem> = emptyList(),
     val favorites: List<HomeMediaItem> = emptyList(),
 )

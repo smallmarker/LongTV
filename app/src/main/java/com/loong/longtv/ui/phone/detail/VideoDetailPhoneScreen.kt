@@ -133,8 +133,6 @@ internal fun VideoDetailPhoneContent(
         val source = selectedSource ?: return
         val targetIndex = state.selectedEpisodeIndex + 1
         if (targetIndex !in source.episodes.indices) return
-        saveLocalProgress(0L, 0L)
-        fullscreenInitialPositionMs = 0L
         onSelectEpisode(source, targetIndex)
     }
 
@@ -260,8 +258,6 @@ internal fun VideoDetailPhoneContent(
                         onSwitchEpisode = { targetIndex ->
                             val source = selectedSource
                             if (source != null && targetIndex in source.episodes.indices) {
-                                saveLocalProgress(0L, 0L)
-                                fullscreenInitialPositionMs = 0L
                                 fullscreenExiting = false
                                 fullscreenVisible = true
                                 onSelectEpisode(source, targetIndex)

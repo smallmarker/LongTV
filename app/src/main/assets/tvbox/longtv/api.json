@@ -13,6 +13,57 @@
     ],
     "sites": [
         {
+            "key": "豆瓣",
+            "name": "☀豆瓣🔹热门",
+            "type": 3,
+            "api": "csp_Douban",
+            "searchable": 0,
+            "quickSearch": 0,
+            "changeable": 1,
+            "filterable": 0,
+            "ext": {
+                "home": "subject_real_time_hotest",
+                "categories": [
+                    {
+                        "id": "subject_real_time_hotest",
+                        "name": "实时热门"
+                    },
+                    {
+                        "id": "movie_real_time_hotest",
+                        "name": "热门电影"
+                    },
+                    {
+                        "id": "tv_real_time_hotest",
+                        "name": "热播剧集"
+                    },
+                    {
+                        "id": "movie_weekly_best",
+                        "name": "一周口碑电影"
+                    },
+                    {
+                        "id": "movie_top250",
+                        "name": "豆瓣Top250"
+                    },
+                    {
+                        "id": "tv_chinese_best_weekly",
+                        "name": "华语口碑剧集"
+                    },
+                    {
+                        "id": "tv_global_best_weekly",
+                        "name": "全球口碑剧集"
+                    },
+                    {
+                        "id": "show_chinese_best_weekly",
+                        "name": "国内口碑综艺"
+                    },
+                    {
+                        "id": "show_global_best_weekly",
+                        "name": "国外口碑综艺"
+                    }
+                ]
+            }
+        },
+        {
             "key": "热播影视",
             "name": "☀热播🔹影视",
             "type": 3,
@@ -34,18 +85,6 @@
             "filterable": 1,
             "ext": {
                 "url": "https://www.xmfyy.cc"
-            }
-        },
-        {
-            "key": "天天影视",
-            "name": "☀天天🔹影视",
-            "type": 3,
-            "api": "csp_TianTian",
-            "searchable": 1,
-            "quickSearch": 1,
-            "filterable": 0,
-            "ext": {
-                "url": "https://www.baixiaotangtop.com"
             }
         },
         {
@@ -78,6 +117,109 @@
             }
         },
         {
+            "key": "360资源",
+            "name": "☀360🔹秒播",
+            "type": 3,
+            "api": "csp_Lzi",
+            "searchable": 1,
+            "quickSearch": 1,
+            "filterable": 0,
+            "ext": {
+                "url": "https://360zy.com/api.php/provide/vod",
+                "playurl": "",
+                "categories": [
+                    "国产剧",
+                    "国产动漫",
+                    "泰国剧",
+                    "台湾剧",
+                    "香港剧",
+                    "欧美剧",
+                    "韩国剧",
+                    "日本剧",
+                    "动作片",
+                    "喜剧片",
+                    "爱情片",
+                    "科幻片",
+                    "恐怖片",
+                    "剧情片",
+                    "战争片",
+                    "大陆综艺",
+                    "港台综艺",
+                    "日韩综艺",
+                    "欧美综艺"
+                ]
+            }
+        },
+        {
+            "key": "非凡资源",
+            "name": "☀非凡🔹秒播",
+            "type": 3,
+            "api": "csp_Lzi",
+            "searchable": 1,
+            "quickSearch": 1,
+            "filterable": 0,
+            "ext": {
+                "url": "https://cj.ffzyapi.com/api.php/provide/vod/",
+                "playurl": "",
+                "categories": [
+                    "国产剧",
+                    "国产动漫",
+                    "泰国剧",
+                    "台湾剧",
+                    "香港剧",
+                    "欧美剧",
+                    "韩国剧",
+                    "日本剧",
+                    "动作片",
+                    "喜剧片",
+                    "爱情片",
+                    "科幻片",
+                    "恐怖片",
+                    "剧情片",
+                    "战争片",
+                    "大陆综艺",
+                    "港台综艺",
+                    "日韩综艺",
+                    "欧美综艺"
+                ]
+            }
+        },
+        {
+            "key": "无尽资源",
+            "name": "☀无尽🔹秒播",
+            "type": 3,
+            "api": "csp_Lzi",
+            "searchable": 1,
+            "quickSearch": 1,
+            "filterable": 0,
+            "ext": {
+                "url": "https://api.wujinapi.me/api.php/provide/vod/",
+                "playurl": "",
+                "categories": [
+                    "国产剧",
+                    "国产动漫",
+                    "泰国剧",
+                    "台湾剧",
+                    "香港剧",
+                    "美国剧",
+                    "韩国剧",
+                    "日本剧",
+                    "海外剧",
+                    "动作片",
+                    "喜剧片",
+                    "爱情片",
+                    "科幻片",
+                    "恐怖片",
+                    "剧情片",
+                    "战争片",
+                    "大陆综艺",
+                    "港台综艺",
+                    "日韩综艺",
+                    "欧美综艺"
+                ]
+            }
+        },
+        {
             "key": "少儿教育",
             "name": "📖少儿🔹教育",
             "type": 3,
@@ -87,6 +229,57 @@
             "filterable": 1,
             "ext": {
                 "json": "./json/少儿教育.json",
+                "cookie": "http://127.0.0.1:9978/file/TVBox/bili_cookie.txt"
+            },
+            "style": {
+                "type": "rect",
+                "ratio": 1.597
+            }
+        },
+        {
+            "key": "课堂教育",
+            "name": "📚课堂🔹教育",
+            "type": 3,
+            "api": "csp_Bili",
+            "searchable": 0,
+            "quickSearch": 0,
+            "filterable": 1,
+            "ext": {
+                "json": "./json/课堂教育.json",
+                "cookie": "http://127.0.0.1:9978/file/TVBox/bili_cookie.txt"
+            },
+            "style": {
+                "type": "rect",
+                "ratio": 1.597
+            }
+        },
+        {
+            "key": "音乐演唱会",
+            "name": "🎵音乐🔹演唱会",
+            "type": 3,
+            "api": "csp_Bili",
+            "searchable": 0,
+            "quickSearch": 0,
+            "filterable": 1,
+            "ext": {
+                "json": "./json/音乐演唱会.json",
+                "cookie": "http://127.0.0.1:9978/file/TVBox/bili_cookie.txt"
+            },
+            "style": {
+                "type": "rect",
+                "ratio": 1.597
+            }
+        },
+        {
+            "key": "听书",
+            "name": "🎧哔哩🔹听书",
+            "type": 3,
+            "api": "csp_Bili",
+            "searchable": 0,
+            "quickSearch": 0,
+            "filterable": 1,
+            "ext": {
+                "json": "./json/听书.json",
                 "cookie": "http://127.0.0.1:9978/file/TVBox/bili_cookie.txt"
             },
             "style": {

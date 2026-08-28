@@ -106,7 +106,10 @@ fun ComposeVideoPlayer(
                 val item = itemBuilder.build()
                 player.setMediaItem(item)
                 player.prepare()
-                if (initialPositionMs > 0) player.seekTo(initialPositionMs)
+                // A new episode must always receive its own initial position. Seeking
+                // explicitly to 0 prevents the previous shared player's position
+                // from carrying over when the resolved stream URL is identical.
+                player.seekTo(initialPositionMs.coerceAtLeast(0L))
                 SharedPlayerSession.markPrepared(videoUrl, requestHeaders, mediaIdentity, cacheEnabled, liveStream)
             } else if (initialPositionMs > 0 && player.currentPosition <= 0L) {
                 player.seekTo(initialPositionMs)

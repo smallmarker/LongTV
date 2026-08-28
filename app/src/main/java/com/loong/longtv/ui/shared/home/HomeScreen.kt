@@ -15,6 +15,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -23,6 +24,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.LazyListScope
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
@@ -57,6 +59,8 @@ import androidx.tv.material3.Text
 import com.loong.longtv.R
 import com.loong.longtv.engine.source.model.VodInfo
 import com.loong.longtv.nav.Screen
+import com.loong.longtv.ui.shared.VideoPosterAspectRatio
+import com.loong.longtv.ui.shared.section.ContentSection
 import com.loong.longtv.ui.shared.widgets.AppButton
 import com.loong.longtv.ui.shared.widgets.AppSearchFieldSurface
 import com.loong.longtv.ui.shared.widgets.TvSurface
@@ -130,7 +134,6 @@ internal fun HomeScreenContent(
 
         MediaRailSection(
             title = "最近观看",
-            actionText = "更多 >",
             emptyText = "还没有观看记录",
             items = uiState.recentWatching,
             isTv = isTv,
@@ -145,14 +148,53 @@ internal fun HomeScreenContent(
             isTv = isTv,
             onMore = { navController.navigate(Screen.Popular.route) },
             onItemClick = { video ->
+                if (uiState.popularVideosRequireSearch) {
+                    navController.navigate(Screen.SearchResult.createRoute(video.name))
+                } else {
+                    navController.navigate(Screen.VideoDetail.createRoute(video.siteKey, video.id))
+                }
+            }
+        )
+
+        VideoRailSection(
+            title = "少儿教育",
+            emptyText = "暂无少儿教育内容",
+            items = uiState.childEducationVideos,
+            isTv = isTv,
+            onMore = { navController.navigate(Screen.ChildEducation.route) },
+            onItemClick = { video ->
                 navController.navigate(Screen.VideoDetail.createRoute(video.siteKey, video.id))
             }
         )
 
-        ChildEducationRailSection(
-            items = uiState.childEducationVideos,
+        VideoRailSection(
+            title = ContentSection.CourseEducation.title,
+            emptyText = ContentSection.CourseEducation.emptyText,
+            items = uiState.courseEducationVideos,
             isTv = isTv,
-            onMore = { navController.navigate(Screen.ChildEducation.route) },
+            onMore = { navController.navigate(Screen.ContentSection.createRoute(ContentSection.CourseEducation.id)) },
+            onItemClick = { video ->
+                navController.navigate(Screen.VideoDetail.createRoute(video.siteKey, video.id))
+            }
+        )
+
+        VideoRailSection(
+            title = ContentSection.MusicConcert.title,
+            emptyText = ContentSection.MusicConcert.emptyText,
+            items = uiState.musicConcertVideos,
+            isTv = isTv,
+            onMore = { navController.navigate(Screen.ContentSection.createRoute(ContentSection.MusicConcert.id)) },
+            onItemClick = { video ->
+                navController.navigate(Screen.VideoDetail.createRoute(video.siteKey, video.id))
+            }
+        )
+
+        VideoRailSection(
+            title = ContentSection.AudioBook.title,
+            emptyText = ContentSection.AudioBook.emptyText,
+            items = uiState.audioBookVideos,
+            isTv = isTv,
+            onMore = { navController.navigate(Screen.ContentSection.createRoute(ContentSection.AudioBook.id)) },
             onItemClick = { video ->
                 navController.navigate(Screen.VideoDetail.createRoute(video.siteKey, video.id))
             }
@@ -162,7 +204,6 @@ internal fun HomeScreenContent(
         if (!isTv || uiState.favorites.isNotEmpty()) {
             MediaRailSection(
                 title = "我的收藏",
-                actionText = "更多 >",
                 emptyText = "还没有收藏内容",
                 items = uiState.favorites,
                 isTv = isTv,
@@ -425,9 +466,7 @@ private fun PopularRailSection(
     Column {
         HomeSectionHeader(
             title = "热门影视",
-            actionText = "更多 >",
-            isTv = isTv,
-            onAction = onMore
+            isTv = isTv
         )
 
         if (items.isEmpty()) {
@@ -449,12 +488,15 @@ private fun PopularRailSection(
                     }
                 }
             }
+            morePosterItem(isTv, onMore)
         }
     }
 }
 
 @Composable
-private fun ChildEducationRailSection(
+private fun VideoRailSection(
+    title: String,
+    emptyText: String,
     items: List<VodInfo>,
     isTv: Boolean,
     onMore: () -> Unit,
@@ -471,14 +513,12 @@ private fun ChildEducationRailSection(
 
     Column {
         HomeSectionHeader(
-            title = "少儿教育",
-            actionText = "更多 >",
-            isTv = isTv,
-            onAction = onMore
+            title = title,
+            isTv = isTv
         )
 
         if (items.isEmpty()) {
-            EmptyLine(text = "暂无少儿教育内容", isTv = isTv)
+            EmptyLine(text = emptyText, isTv = isTv)
             return@Column
         }
 
@@ -496,6 +536,7 @@ private fun ChildEducationRailSection(
                     }
                 }
             }
+            morePosterItem(isTv, onMore)
         }
     }
 }
@@ -503,7 +544,6 @@ private fun ChildEducationRailSection(
 @Composable
 private fun MediaRailSection(
     title: String,
-    actionText: String,
     emptyText: String,
     items: List<HomeMediaItem>,
     isTv: Boolean,
@@ -522,9 +562,7 @@ private fun MediaRailSection(
     Column {
         HomeSectionHeader(
             title = title,
-            actionText = if (items.isNotEmpty()) actionText else null,
-            isTv = isTv,
-            onAction = onMore
+            isTv = isTv
         )
 
         if (items.isEmpty()) {
@@ -546,6 +584,7 @@ private fun MediaRailSection(
                     }
                 }
             }
+            morePosterItem(isTv, onMore)
         }
     }
 }
@@ -553,32 +592,45 @@ private fun MediaRailSection(
 @Composable
 private fun HomeSectionHeader(
     title: String,
-    actionText: String?,
     isTv: Boolean,
-    onAction: () -> Unit,
 ) {
-    Row(
-        modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.SpaceBetween,
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        Text(
-            text = title,
-            color = AppTextPrimary,
-            fontSize = if (isTv) AppThemeTokens.SectionTitleTv else AppThemeTokens.SectionTitlePhone,
-            fontWeight = FontWeight.SemiBold
-        )
-        if (actionText != null) {
-            TvSurface(onClick = onAction) {
-                Text(
-                    text = actionText,
-                    color = AppTextMuted,
-                    fontSize = if (isTv) AppThemeTokens.ActionTextTv else AppThemeTokens.ActionTextPhone,
-                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
-                    maxLines = 1
-                )
+    Text(
+        text = title,
+        color = AppTextPrimary,
+        fontSize = if (isTv) AppThemeTokens.SectionTitleTv else AppThemeTokens.SectionTitlePhone,
+        fontWeight = FontWeight.SemiBold
+    )
+}
+
+private fun LazyListScope.morePosterItem(isTv: Boolean, onMore: () -> Unit) {
+    item(key = "more") {
+        TvSurface(onClick = onMore) {
+            Box(modifier = Modifier.width(if (isTv) AppThemeTokens.TvPosterRailWidth else AppThemeTokens.PhonePosterRailWidth)) {
+                MorePosterCard(isTv = isTv)
             }
         }
+    }
+}
+
+@Composable
+private fun MorePosterCard(isTv: Boolean) {
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .aspectRatio(VideoPosterAspectRatio)
+            .clip(AppThemeTokens.cardShape())
+            .background(Color.White.copy(alpha = 0.08f))
+            .border(1.dp, AppThemeTokens.mutedBorder(), AppThemeTokens.cardShape()),
+        contentAlignment = Alignment.Center
+    ) {
+        Text(
+            text = "查看更多",
+            color = AppTextPrimary,
+            fontSize = if (isTv) 16.sp else 14.sp,
+            fontWeight = FontWeight.SemiBold,
+            textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+            lineHeight = if (isTv) 24.sp else 21.sp
+        )
     }
 }
 

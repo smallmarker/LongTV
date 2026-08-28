@@ -49,7 +49,7 @@ fun TvFullscreenPlayerScreen(
         title = resolvedTitle,
         videoUrl = resolvedMedia?.url ?: videoUrl,
         requestHeaders = resolvedMedia?.headers ?: requestHeaders,
-        initialPositionMs = initialPositionMs,
+        initialPositionMs = resolvedMedia?.let { detailState?.resumePositionMs } ?: initialPositionMs,
         episodeIndex = resolvedEpisodeIndex,
         episodeCount = resolvedEpisodeCount,
         isTv = true,

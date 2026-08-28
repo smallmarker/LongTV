@@ -138,6 +138,12 @@ private fun PopularContentSection(
         gridFocused = false
     }
 
+    BackHandler(enabled = filterPanelVisible) {
+        onTabSelected(selectedTabIndex)
+        if (isTv) selectedTabFocusRequester.requestFocus()
+        gridFocused = false
+    }
+
     Column(modifier = Modifier.fillMaxSize()) {
         if (tabs.isNotEmpty()) {
             PopularTabsRow(
@@ -159,7 +165,7 @@ private fun PopularContentSection(
             PopularVideoGrid(
                 pagingFlow = videoPagingFlow,
                 selectedTab = tabs.getOrNull(selectedTabIndex),
-                currentSiteKey = currentSite?.key.orEmpty(),
+                currentSite = currentSite,
                 isTv = isTv,
                 onGridFocusChanged = { gridFocused = it },
                 onBackFromGrid = {
@@ -253,7 +259,7 @@ private fun PopularTabsRow(
 private fun PopularVideoGrid(
     pagingFlow: Flow<PagingData<VodInfo>>,
     selectedTab: Category?,
-    currentSiteKey: String,
+    currentSite: SiteConfig?,
     isTv: Boolean,
     onGridFocusChanged: (Boolean) -> Unit,
     onBackFromGrid: () -> Unit,
@@ -367,9 +373,13 @@ private fun PopularVideoGrid(
                         onGridFocusChanged(focusState.isFocused)
                     },
                     onClick = {
-                        navController.navigate(
-                            Screen.VideoDetail.createRoute(video.siteKey.ifBlank { currentSiteKey }, video.id)
-                        )
+                        if (currentSite?.api == DOUBAN_API) {
+                            navController.navigate(Screen.SearchResult.createRoute(video.name))
+                        } else {
+                            navController.navigate(
+                                Screen.VideoDetail.createRoute(video.siteKey.ifBlank { currentSite?.key.orEmpty() }, video.id)
+                            )
+                        }
                     }
                 ) {
                     VideoCard(video = video)
@@ -392,6 +402,8 @@ private fun PopularVideoGrid(
         }
     }
 }
+
+private const val DOUBAN_API = "csp_Douban"
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable

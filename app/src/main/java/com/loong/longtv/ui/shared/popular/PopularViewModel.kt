@@ -14,6 +14,7 @@ import com.loong.longtv.engine.source.model.Filter
 import com.loong.longtv.engine.source.model.HomeContent
 import com.loong.longtv.engine.source.model.SiteConfig
 import com.loong.longtv.engine.source.model.VodInfo
+import com.loong.longtv.ui.shared.section.ContentSection
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -85,7 +86,7 @@ class PopularViewModel @Inject constructor(
             val source = sourcePreference.load() ?: DefaultSources.default
             val result = engine.start(source)
             if (result.isSuccess) {
-                val sites = result.getOrThrow().sites.filter { it.isSpiderSite() && it.key != CHILD_EDUCATION_SITE_KEY }
+                val sites = result.getOrThrow().sites.filter { it.isSpiderSite() && it.key !in ContentSection.nonPopularSiteKeys }
                 val site = sites.selectPopularSite(sourcePreference.loadPopularSiteKey())
                 if (site == null) {
                     _uiState.update {
@@ -193,17 +194,14 @@ class PopularViewModel @Inject constructor(
                     tab = tab,
                     filters = filters,
                     engine = engine,
-                    homeTabId = HOME_TAB_ID
+                    homeTabId = ""
                 )
             }
         ).flow.cachedIn(viewModelScope)
     }
 
     private fun buildTabs(homeContent: HomeContent?): List<Category> {
-        return buildList {
-            add(Category(HOME_TAB_ID, "首页"))
-            addAll(homeContent?.categories.orEmpty())
-        }.distinctBy { it.id }
+        return homeContent?.categories.orEmpty().distinctBy { it.id }
     }
 
     private fun Category.cacheKey(site: SiteConfig, filters: Map<String, String>): String {
@@ -215,10 +213,6 @@ class PopularViewModel @Inject constructor(
         return firstOrNull { it.key == siteKey } ?: firstOrNull()
     }
 
-    companion object {
-        private const val HOME_TAB_ID = "__home__"
-        private const val CHILD_EDUCATION_SITE_KEY = "少儿教育"
-    }
 }
 
 data class PopularUiState(
