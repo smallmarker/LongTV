@@ -20,17 +20,10 @@ enum class ContentSection(
         siteKey = "音乐演唱会",
         loadingText = "正在加载音乐演唱会...",
         emptyText = "暂无音乐演唱会内容"
-    ),
-    AudioBook(
-        id = "audio_book",
-        title = "听书",
-        siteKey = "听书",
-        loadingText = "正在加载听书内容...",
-        emptyText = "暂无听书内容"
     );
 
     companion object {
-        val nonPopularSiteKeys: Set<String> = entries.map { it.siteKey }.toSet() + "少儿教育"
+        val nonPopularSiteKeys: Set<String> = entries.map { it.siteKey }.toSet() + setOf("少儿教育", "360短剧")
 
         fun fromId(id: String?): ContentSection? = entries.firstOrNull { it.id == id }
     }

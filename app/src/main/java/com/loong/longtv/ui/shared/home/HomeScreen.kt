@@ -189,17 +189,6 @@ internal fun HomeScreenContent(
             }
         )
 
-        VideoRailSection(
-            title = ContentSection.AudioBook.title,
-            emptyText = ContentSection.AudioBook.emptyText,
-            items = uiState.audioBookVideos,
-            isTv = isTv,
-            onMore = { navController.navigate(Screen.ContentSection.createRoute(ContentSection.AudioBook.id)) },
-            onItemClick = { video ->
-                navController.navigate(Screen.VideoDetail.createRoute(video.siteKey, video.id))
-            }
-        )
-
         // TV 首页不展示空收藏模块；手机端保留原有的空状态提示。
         if (!isTv || uiState.favorites.isNotEmpty()) {
             MediaRailSection(

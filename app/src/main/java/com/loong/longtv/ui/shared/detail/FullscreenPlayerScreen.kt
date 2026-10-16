@@ -358,6 +358,18 @@ internal fun FullscreenPlayerContent(
         )
     }
 
+    fun updateRemoteSeekPreview(direction: Int, duration: Long, deltaMs: Long) {
+        val targetPosition = (remoteSeekAnchorMs + direction * deltaMs).coerceIn(0L, duration)
+        remoteSeekPreviewMs = targetPosition
+        interactionState.updateSeekPreview(
+            remoteSeekOverlayState(
+                targetPositionMs = targetPosition,
+                anchorPositionMs = remoteSeekAnchorMs,
+                direction = direction
+            )
+        )
+    }
+
     fun startRemoteSeek(direction: Int) {
         val duration = durationMs.takeIf { it > 0 } ?: return
         if (remoteSeekDirection == direction && remoteSeekJob?.isActive == true) return
@@ -368,21 +380,21 @@ internal fun FullscreenPlayerContent(
         remoteSeekPreviewMs = remoteSeekAnchorMs
         activePanel = null
         interactionState.beginGesture()
+        updateRemoteSeekPreview(
+            direction = direction,
+            duration = duration,
+            deltaMs = REMOTE_SEEK_TAP_STEP_MS
+        )
 
         remoteSeekJob = coroutineScope.launch {
+            delay(REMOTE_SEEK_HOLD_DELAY_MS)
             val startedAt = SystemClock.elapsedRealtime()
             while (isActive) {
                 val elapsedMs = SystemClock.elapsedRealtime() - startedAt
-                val previewDeltaMs = REMOTE_SEEK_INITIAL_STEP_MS +
-                    (elapsedMs * REMOTE_SEEK_SPEED_MS_PER_SECOND / 1_000L)
-                val targetPosition = (remoteSeekAnchorMs + direction * previewDeltaMs).coerceIn(0L, duration)
-                remoteSeekPreviewMs = targetPosition
-                interactionState.updateSeekPreview(
-                    remoteSeekOverlayState(
-                        targetPositionMs = targetPosition,
-                        anchorPositionMs = remoteSeekAnchorMs,
-                        direction = direction
-                    )
+                updateRemoteSeekPreview(
+                    direction = direction,
+                    duration = duration,
+                    deltaMs = remoteSeekDeltaMs(elapsedMs)
                 )
                 delay(REMOTE_SEEK_PREVIEW_FRAME_MS)
             }
@@ -686,7 +698,10 @@ internal fun FullscreenPlayerContent(
             )
         }
 
-        PlayerFeedbackPopup(overlay = interactionState.feedbackOverlay)
+        PlayerFeedbackPopup(
+            overlay = interactionState.feedbackOverlay,
+            tvLayout = isTv
+        )
 
         transientMessage?.let { message ->
             Box(
@@ -1285,9 +1300,19 @@ private enum class PlayerIcon {
     Back
 }
 
-private const val REMOTE_SEEK_INITIAL_STEP_MS = 10_000L
-private const val REMOTE_SEEK_SPEED_MS_PER_SECOND = 18_000L
+private const val REMOTE_SEEK_TAP_STEP_MS = 10_000L
+private const val REMOTE_SEEK_HOLD_DELAY_MS = 250L
+private const val REMOTE_SEEK_BASE_SPEED_MS_PER_SECOND = 40_000L
+private const val REMOTE_SEEK_ACCELERATION_MS_PER_SECOND_SQUARED = 30_000L
 private const val REMOTE_SEEK_PREVIEW_FRAME_MS = 50L
+
+private fun remoteSeekDeltaMs(elapsedMs: Long): Long {
+    val elapsedSeconds = elapsedMs.coerceAtLeast(0L) / 1_000.0
+    val acceleratedDistance =
+        REMOTE_SEEK_BASE_SPEED_MS_PER_SECOND * elapsedSeconds +
+            REMOTE_SEEK_ACCELERATION_MS_PER_SECOND_SQUARED * elapsedSeconds * elapsedSeconds / 2.0
+    return REMOTE_SEEK_TAP_STEP_MS + acceleratedDistance.roundToLong()
+}
 
 private fun formatCurrentTime(): String = SimpleDateFormat("HH:mm", Locale.getDefault()).format(Date())
 

@@ -307,7 +307,8 @@ fun PhoneFullscreenGestureLayer(
 
 @Composable
 fun PlayerFeedbackPopup(
-    overlay: PhoneFeedbackOverlay?
+    overlay: PhoneFeedbackOverlay?,
+    tvLayout: Boolean = false
 ) {
     if (overlay == null) return
 
@@ -324,15 +325,18 @@ fun PlayerFeedbackPopup(
             is PhoneFeedbackOverlay.Adjustment -> AdjustmentFeedbackOverlay(
                 modifier = Modifier,
                 type = overlay.state.type,
-                percent = overlay.state.percent
+                percent = overlay.state.percent,
+                tvLayout = tvLayout
             )
             is PhoneFeedbackOverlay.Seek -> SeekFeedbackOverlay(
                 modifier = Modifier,
-                state = overlay.state
+                state = overlay.state,
+                tvLayout = tvLayout
             )
             is PhoneFeedbackOverlay.PlayPause -> PlayPauseFeedbackOverlay(
                 modifier = Modifier,
-                isPlaying = overlay.isPlaying
+                isPlaying = overlay.isPlaying,
+                tvLayout = tvLayout
             )
         }
     }
@@ -343,36 +347,44 @@ fun AdjustmentFeedbackOverlay(
     modifier: Modifier,
     type: PhoneGestureType,
     percent: Int,
+    tvLayout: Boolean = false,
     accentColor: Color = Color(0xFF32D0FF),
     contentColor: Color = Color(0xFFF6F8FB)
 ) {
+    val cornerRadius = if (tvLayout) 12.dp else 20.dp
+    val horizontalPadding = if (tvLayout) 28.dp else 16.dp
+    val verticalPadding = if (tvLayout) 22.dp else 14.dp
+    val spacing = if (tvLayout) 12.dp else 8.dp
+    val glyphSize = if (tvLayout) 54.dp else 40.dp
+    val barWidth = if (tvLayout) 240.dp else 104.dp
+    val barHeight = if (tvLayout) 8.dp else 4.dp
     Column(
         modifier = modifier
-            .clip(RoundedCornerShape(20.dp))
+            .clip(RoundedCornerShape(cornerRadius))
             .background(Color(0xCC000000))
-            .padding(horizontal = 16.dp, vertical = 14.dp),
+            .padding(horizontal = horizontalPadding, vertical = verticalPadding),
         horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.spacedBy(8.dp)
+        verticalArrangement = Arrangement.spacedBy(spacing)
     ) {
         OverlayGlyph(
             icon = if (type == PhoneGestureType.BRIGHTNESS) OverlayIcon.BRIGHTNESS else OverlayIcon.VOLUME,
-            modifier = Modifier.size(40.dp)
+            modifier = Modifier.size(glyphSize)
         )
         BasicText(
             text = if (type == PhoneGestureType.BRIGHTNESS) "亮度 $percent%" else "音量 $percent%",
-            style = TextStyle(color = contentColor, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
+            style = TextStyle(color = contentColor, fontSize = if (tvLayout) 19.sp else 13.sp, fontWeight = FontWeight.SemiBold)
         )
         Box(
             modifier = Modifier
-                .width(104.dp)
-                .height(4.dp)
+                .width(barWidth)
+                .height(barHeight)
                 .clip(RoundedCornerShape(999.dp))
                 .background(Color.White.copy(alpha = 0.18f))
         ) {
             Box(
                 modifier = Modifier
                     .fillMaxWidth(percent / 100f)
-                    .height(4.dp)
+                    .height(barHeight)
                     .background(accentColor)
             )
         }
@@ -383,46 +395,53 @@ fun AdjustmentFeedbackOverlay(
 fun SeekFeedbackOverlay(
     modifier: Modifier,
     state: SeekOverlayState,
+    tvLayout: Boolean = false,
     accentColor: Color = Color(0xFF32D0FF),
     contentColor: Color = Color(0xFFF6F8FB),
     secondaryColor: Color = Color(0xBDE7ECF3)
 ) {
     val isForward = state.deltaMs >= 0
+    val cornerRadius = if (tvLayout) 12.dp else 20.dp
+    val horizontalPadding = if (tvLayout) 24.dp else 16.dp
+    val verticalPadding = if (tvLayout) 22.dp else 14.dp
+    val spacing = if (tvLayout) 10.dp else 8.dp
+    val barWidth = if (tvLayout) 180.dp else 104.dp
+    val barHeight = if (tvLayout) 8.dp else 4.dp
     Column(
         modifier = modifier
-            .clip(RoundedCornerShape(20.dp))
+            .clip(RoundedCornerShape(cornerRadius))
             .background(Color(0xCC000000))
-            .padding(horizontal = 16.dp, vertical = 14.dp),
+            .padding(horizontal = horizontalPadding, vertical = verticalPadding),
         horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.spacedBy(8.dp)
+        verticalArrangement = Arrangement.spacedBy(spacing)
     ) {
         BasicText(
             text = if (isForward) "快进  ▶▶" else "◀◀  快退",
-            style = TextStyle(color = contentColor, fontSize = 13.sp, fontWeight = FontWeight.Bold)
+            style = TextStyle(color = contentColor, fontSize = if (tvLayout) 21.sp else 13.sp, fontWeight = FontWeight.Bold)
         )
         Box(
             modifier = Modifier
-                .width(104.dp)
-                .height(4.dp)
+                .width(barWidth)
+                .height(barHeight)
                 .clip(RoundedCornerShape(999.dp))
                 .background(Color.White.copy(alpha = 0.18f))
         ) {
             Box(
                 modifier = Modifier
                     .fillMaxWidth(playbackProgress(state.targetPositionMs, state.durationMs))
-                    .height(4.dp)
+                    .height(barHeight)
                     .background(accentColor)
             )
         }
         BasicText(
             text = "${formatPlayerTime(state.targetPositionMs)} / ${formatPlayerTime(state.durationMs)}",
-            style = TextStyle(color = contentColor, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+            style = TextStyle(color = contentColor, fontSize = if (tvLayout) 18.sp else 12.sp, fontWeight = FontWeight.SemiBold)
         )
         BasicText(
             text = state.reachedEdgeMessage ?: signedDurationLabel(state.deltaMs),
             style = TextStyle(
                 color = if (state.reachedEdgeMessage == null) secondaryColor else accentColor,
-                fontSize = 11.sp,
+                fontSize = if (tvLayout) 16.sp else 11.sp,
                 fontWeight = FontWeight.SemiBold
             )
         )
@@ -432,18 +451,19 @@ fun SeekFeedbackOverlay(
 @Composable
 fun PlayPauseFeedbackOverlay(
     modifier: Modifier,
-    isPlaying: Boolean
+    isPlaying: Boolean,
+    tvLayout: Boolean = false
 ) {
     Box(
         modifier = modifier
-            .size(80.dp)
+            .size(if (tvLayout) 108.dp else 80.dp)
             .clip(CircleShape)
             .background(Color(0xB3000000)),
         contentAlignment = Alignment.Center
     ) {
         OverlayGlyph(
             icon = if (isPlaying) OverlayIcon.PLAY else OverlayIcon.PAUSE,
-            modifier = Modifier.size(56.dp)
+            modifier = Modifier.size(if (tvLayout) 72.dp else 56.dp)
         )
     }
 }

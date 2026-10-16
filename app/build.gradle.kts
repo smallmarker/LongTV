@@ -20,7 +20,7 @@ val keystoreProperties = Properties().apply {
 val apkBaseName = "LongTV"
 // Single source of truth for the installed APK version, settings page and release file name.
 // Format: major.minor.patch, e.g. 1.1.0 -> 10100.
-val appVersionName = "1.0.2"
+val appVersionName = "1.0.3"
 val appVersionCode = appVersionName.split(".").let { parts ->
     require(parts.size == 3 && parts.all { it.toIntOrNull() != null }) {
         "appVersionName must use major.minor.patch format, for example 1.1.0"

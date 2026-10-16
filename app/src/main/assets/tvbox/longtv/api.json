@@ -84,7 +84,8 @@
             "quickSearch": 1,
             "filterable": 1,
             "ext": {
-                "url": "https://www.xmfyy.cc"
+                "url": "https://www.xmftv.com",
+                "backupUrls": []
             }
         },
         {
@@ -220,6 +221,22 @@
             }
         },
         {
+            "key": "360短剧",
+            "name": "360短剧",
+            "type": 3,
+            "api": "csp_Lzi",
+            "searchable": 0,
+            "quickSearch": 0,
+            "filterable": 0,
+            "ext": {
+                "url": "https://360zy.com/api.php/provide/vod",
+                "playurl": "",
+                "categories": [
+                    "爽文短剧"
+                ]
+            }
+        },
+        {
             "key": "少儿教育",
             "name": "📖少儿🔹教育",
             "type": 3,
@@ -263,23 +280,6 @@
             "filterable": 1,
             "ext": {
                 "json": "./json/音乐演唱会.json",
-                "cookie": "http://127.0.0.1:9978/file/TVBox/bili_cookie.txt"
-            },
-            "style": {
-                "type": "rect",
-                "ratio": 1.597
-            }
-        },
-        {
-            "key": "听书",
-            "name": "🎧哔哩🔹听书",
-            "type": 3,
-            "api": "csp_Bili",
-            "searchable": 0,
-            "quickSearch": 0,
-            "filterable": 1,
-            "ext": {
-                "json": "./json/听书.json",
                 "cookie": "http://127.0.0.1:9978/file/TVBox/bili_cookie.txt"
             },
             "style": {

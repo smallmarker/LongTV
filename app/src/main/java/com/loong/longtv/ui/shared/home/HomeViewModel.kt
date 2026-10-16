@@ -53,7 +53,6 @@ class HomeViewModel @Inject constructor(
                 val childEducationSite = sites.firstOrNull { it.key == CHILD_EDUCATION_SITE_KEY }
                 val courseEducationSite = sites.firstOrNull { it.key == ContentSection.CourseEducation.siteKey }
                 val musicConcertSite = sites.firstOrNull { it.key == ContentSection.MusicConcert.siteKey }
-                val audioBookSite = sites.firstOrNull { it.key == ContentSection.AudioBook.siteKey }
                 _uiState.update { state ->
                     state.copy(
                         loading = false,
@@ -63,7 +62,6 @@ class HomeViewModel @Inject constructor(
                         childEducationVideos = emptyList(),
                         courseEducationVideos = emptyList(),
                         musicConcertVideos = emptyList(),
-                        audioBookVideos = emptyList(),
                         errorMessage = null,
                     )
                 }
@@ -77,9 +75,6 @@ class HomeViewModel @Inject constructor(
                 musicConcertSite?.let {
                     loadSectionVideos(it) { state, videos -> state.copy(musicConcertVideos = videos) }
                 }
-                audioBookSite?.let {
-                    loadSectionVideos(it) { state, videos -> state.copy(audioBookVideos = videos) }
-                }
             } else {
                 _uiState.update { state ->
                     state.copy(
@@ -88,7 +83,6 @@ class HomeViewModel @Inject constructor(
                         childEducationVideos = emptyList(),
                         courseEducationVideos = emptyList(),
                         musicConcertVideos = emptyList(),
-                        audioBookVideos = emptyList(),
                         errorMessage = "加载播放源失败: ${result.exceptionOrNull()?.message.orEmpty()}",
                     )
                 }
@@ -226,7 +220,6 @@ data class HomeUiState(
     val childEducationVideos: List<VodInfo> = emptyList(),
     val courseEducationVideos: List<VodInfo> = emptyList(),
     val musicConcertVideos: List<VodInfo> = emptyList(),
-    val audioBookVideos: List<VodInfo> = emptyList(),
     val recentWatching: List<HomeMediaItem> = emptyList(),
     val favorites: List<HomeMediaItem> = emptyList(),
 )
