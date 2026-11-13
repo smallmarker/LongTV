@@ -197,37 +197,20 @@ internal fun LiveScreenContent(
                         if (message.isBehindLiveWindowError()) {
                             val driftCount = (liveWindowDriftCounts[selectedChannel.url] ?: 0) + 1
                             liveWindowDriftCounts = liveWindowDriftCounts + (selectedChannel.url to driftCount)
-                            val shouldFallback = driftCount >= 2
-                            val failedUrls = if (shouldFallback) invalidChannelUrls + selectedChannel.url else invalidChannelUrls
-                            val fallbackIndex = if (shouldFallback) {
-                                uiState.channels.findFallbackLiveChannelIndex(
-                                    currentIndex = selectedIndex,
-                                    invalidUrls = failedUrls
-                                )
-                            } else {
-                                null
-                            }
-                            if (fallbackIndex != null) {
-                                invalidChannelUrls = failedUrls
-                                selectedIndex = fallbackIndex
+                            if (driftCount == 1) {
                                 playbackReloadKey++
                                 playerReady = false
                                 playerBuffering = true
                                 playbackError = null
-                            } else {
-                                playbackReloadKey++
-                                playerReady = false
-                                playerBuffering = true
-                                playbackError = null
+                                return@VideoPlayerView
                             }
-                            return@VideoPlayerView
                         }
                         val failedUrls = invalidChannelUrls + selectedChannel.url
                         invalidChannelUrls = failedUrls
                         val fallbackIndex = uiState.channels.findFallbackLiveChannelIndex(
                             currentIndex = selectedIndex,
                             invalidUrls = failedUrls,
-                            preferSameIdentity = false
+                            preferSameIdentity = message.isBehindLiveWindowError()
                         )
                         if (fallbackIndex != null) {
                             selectedIndex = fallbackIndex
@@ -631,7 +614,7 @@ private fun String.toLivePlaybackErrorText(): String {
     return when {
         contains("404", ignoreCase = true) -> "当前直播线路已失效（404），请选择其他频道或稍后重试。"
         contains("403", ignoreCase = true) -> "当前直播线路拒绝访问（403），请选择其他频道或稍后重试。"
-        isBehindLiveWindowError() -> "直播延迟过大，正在重新同步到最新直播位置。"
+        isBehindLiveWindowError() -> "当前直播线路无法同步，请重试或切换其他频道。"
         contains("timeout", ignoreCase = true) -> "当前直播线路响应超时，请稍后重试或切换其他频道。"
         contains("Source error", ignoreCase = true) -> "当前直播线路暂时不可用，请稍后重试或切换其他频道。"
         else -> this.ifBlank { "直播播放失败，请稍后重试或切换其他频道。" }

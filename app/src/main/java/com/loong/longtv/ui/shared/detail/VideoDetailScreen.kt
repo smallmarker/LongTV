@@ -11,6 +11,7 @@ import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.border
+import androidx.compose.foundation.focusGroup
 import androidx.compose.foundation.focusable
 import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.gestures.detectTapGestures
@@ -29,6 +30,8 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
@@ -42,6 +45,7 @@ import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.key
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -76,6 +80,7 @@ import androidx.tv.material3.Text
 import com.loong.longtv.nav.Screen
 import com.loong.longtv.engine.source.model.PlayLine
 import com.loong.longtv.engine.source.model.Episode
+import com.loong.longtv.engine.source.model.VodInfo
 import com.loong.longtv.engine.player.PlayableMedia
 import com.loong.longtv.ui.theme.AppCardOverlay
 import com.loong.longtv.ui.theme.AppBackground
@@ -94,6 +99,7 @@ import com.loong.longtv.ui.shared.widgets.AppButton
 import com.loong.longtv.ui.shared.widgets.SectionHeader
 import com.loong.longtv.ui.shared.widgets.SmartAsyncImage
 import com.loong.longtv.ui.shared.widgets.TvSurface
+import com.loong.longtv.ui.shared.widgets.restoreTvFocus
 import com.loong.player.PlayerFeedbackPopup
 import com.loong.player.PhoneFullscreenGestureLayer
 import com.loong.player.PhoneGestureType
@@ -120,6 +126,8 @@ internal fun VideoDetailRouteContent(
         selectedSource: PlayLine?,
         playableMedia: PlayableMedia?,
         openingFullscreen: Boolean,
+        restoreEpisodeFocus: Boolean,
+        onEpisodeFocusRestored: () -> Unit,
         onOpenFullscreen: (PlayableMedia, String, Long) -> Unit,
         onProgressChanged: (Long, Long) -> Unit,
         onToggleFavorite: () -> Unit,
@@ -135,9 +143,12 @@ internal fun VideoDetailRouteContent(
     val savedStateHandle = currentBackStackEntry?.savedStateHandle
     var reopenFullscreenAfterSwitch by remember(key, id) { mutableStateOf(false) }
     var openingFullscreen by remember(key, id) { mutableStateOf(false) }
+    var restoreEpisodeFocus by rememberSaveable(key, id) { mutableStateOf(false) }
 
     fun openFullscreen(playableMedia: PlayableMedia, episodeName: String, positionMs: Long) {
         openingFullscreen = true
+        restoreEpisodeFocus = true
+        viewModel.applyFullscreenProgress(positionMs)
         navigator.navigate(
             Screen.FullscreenPlayer.createRoute(
                 title = buildString {
@@ -154,12 +165,14 @@ internal fun VideoDetailRouteContent(
     }
 
     LaunchedEffect(key, id) {
-        viewModel.loadDetail(key, id)
+        viewModel.loadDetail(key, id, PlaybackSearchResume.fromSearch(navigator))
     }
 
     LaunchedEffect(currentBackStackEntry) {
+        if (currentBackStackEntry?.destination?.route != Screen.FullscreenPlayer.route) {
+            openingFullscreen = false
+        }
         val position = savedStateHandle?.remove<Long>("fullscreen_position") ?: return@LaunchedEffect
-        openingFullscreen = false
         viewModel.applyFullscreenProgress(position)
     }
 
@@ -197,7 +210,7 @@ internal fun VideoDetailRouteContent(
 
         else -> {
             val detail = state.detail ?: return
-            val sources = detail.getPlayLines()
+            val sources = remember(detail.playFrom, detail.playUrl) { detail.getPlayLines() }
             val selectedSource = sources.getOrNull(state.selectedSourceIndex)
             val playableMedia = state.playableMedia
             val onPlayCurrent = {
@@ -213,8 +226,11 @@ internal fun VideoDetailRouteContent(
                 selectedSource,
                 playableMedia,
                 openingFullscreen,
+                restoreEpisodeFocus && !openingFullscreen &&
+                    currentBackStackEntry?.destination?.route == Screen.VideoDetail.route,
+                { restoreEpisodeFocus = false },
                 ::openFullscreen,
-                viewModel::saveProgress,
+                { position, duration -> viewModel.saveProgress(state, selectedSource, position, duration) },
                 viewModel::toggleFavorite,
                 onPlayCurrent,
                 viewModel::retryCurrentEpisode,
@@ -226,6 +242,9 @@ internal fun VideoDetailRouteContent(
     }
 }
 
+internal fun VodInfo.playbackIdentity(source: PlayLine?, episodeIndex: Int, sessionId: Int): String =
+    listOf(siteKey, id, source?.flag.orEmpty(), episodeIndex.toString(), sessionId.toString()).joinToString("\u0000")
+
 @Composable
 internal fun DetailPreviewBlock(
     modifier: Modifier = Modifier,
@@ -235,6 +254,7 @@ internal fun DetailPreviewBlock(
     resumePositionMs: Long,
     selectedSource: PlayLine?,
     selectedEpisodeIndex: Int,
+    mediaIdentity: String,
     sharedSessionReleaseDelayMs: Long,
     onBack: () -> Unit,
     onOpenFullscreen: (PlayableMedia, String, Long) -> Unit,
@@ -331,7 +351,7 @@ internal fun DetailPreviewBlock(
                 modifier = Modifier.fillMaxSize(),
                 videoUrl = playableMedia.url,
                 requestHeaders = playableMedia.headers,
-                mediaIdentity = "episode-$selectedEpisodeIndex",
+                mediaIdentity = mediaIdentity,
                 initialPositionMs = resumePositionMs,
                 repeat = false,
                 enableNativeController = false,
@@ -1465,74 +1485,111 @@ internal fun EpisodeGrid(
     phoneLayout: Boolean,
     playInfo: PlayLine?,
     selectedIndex: Int,
+    restoreFocus: Boolean = false,
+    onFocusRestored: () -> Unit = {},
     onSelect: (PlayLine, Int) -> Unit
 ) {
-    val episodes = playInfo?.episodes.orEmpty()
-    if (episodes.isEmpty()) {
+    if (playInfo == null || playInfo.episodes.isEmpty()) {
         Text(text = "当前线路暂无可播放集数", color = AppTextMuted, fontSize = 14.sp)
         return
     }
 
-    if (phoneLayout) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(bottom = 24.dp),
-            verticalArrangement = Arrangement.spacedBy(10.dp)
-        ) {
-            episodes.chunked(3).forEachIndexed { rowIndex, rowItems ->
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(10.dp)
-                ) {
-                    rowItems.forEachIndexed { columnIndex, episode ->
-                        val actualIndex = rowIndex * 3 + columnIndex
-                        PhoneEpisodeCard(
-                            text = episode.displayLabel(actualIndex),
-                            selected = actualIndex == selectedIndex,
-                            onClick = { playInfo?.let { onSelect(it, actualIndex) } },
-                            modifier = Modifier.weight(1f)
-                        )
-                    }
-                    repeat(3 - rowItems.size) {
-                        Spacer(modifier = Modifier.weight(1f))
+    val episodes = playInfo.episodes
+    GroupedEpisodes(episodes.size, selectedIndex, phoneLayout, playInfo to restoreFocus) { visibleIndices ->
+        if (phoneLayout) {
+            Column(
+                modifier = Modifier.fillMaxWidth().padding(bottom = 24.dp),
+                verticalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                visibleIndices.chunked(3).forEach { rowItems ->
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        rowItems.forEach { index ->
+                            PhoneEpisodeCard(
+                                text = episodes[index].displayLabel(index),
+                                selected = index == selectedIndex,
+                                onClick = { onSelect(playInfo, index) },
+                                modifier = Modifier.weight(1f)
+                            )
+                        }
+                        repeat(3 - rowItems.size) { Spacer(Modifier.weight(1f)) }
                     }
                 }
             }
-        }
-    } else if (compact) {
-        FlowRow(
-            horizontalArrangement = Arrangement.spacedBy(12.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp)
-        ) {
-            episodes.forEachIndexed { index, episode ->
-                TvEpisodeTile(
-                    text = episode.displayLabel(index),
-                    selected = index == selectedIndex,
-                    onClick = { playInfo?.let { onSelect(it, index) } }
-                )
-            }
-        }
-    } else {
-        FlowRow(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(bottom = 20.dp),
-            horizontalArrangement = Arrangement.spacedBy(12.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp)
-        ) {
-            episodes.forEachIndexed { index, episode ->
-                TvEpisodeTile(
-                    text = episode.displayLabel(index),
-                    selected = index == selectedIndex,
-                    onClick = { playInfo?.let { onSelect(it, index) } }
-                )
+        } else {
+            FlowRow(
+                modifier = if (compact) Modifier else Modifier.fillMaxWidth().padding(bottom = 20.dp),
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                for (index in visibleIndices) {
+                    TvEpisodeTile(
+                        text = episodes[index].displayLabel(index),
+                        selected = index == selectedIndex,
+                        modifier = Modifier.restoreTvFocus(restoreFocus && index == selectedIndex, onFocusRestored),
+                        onClick = { onSelect(playInfo, index) }
+                    )
+                }
             }
         }
     }
 }
 
-private fun Episode.displayLabel(index: Int): String {
+@Composable
+internal fun GroupedEpisodes(
+    episodeCount: Int,
+    selectedIndex: Int,
+    phoneLayout: Boolean,
+    resetKey: Any?,
+    content: @Composable (IntRange) -> Unit
+) {
+    if (episodeCount <= 0) return
+    val groupSize = if (episodeCount > 100) 30 else 20
+    val groupCount = (episodeCount - 1) / groupSize + 1
+    val playingGroup = selectedIndex.coerceIn(0, episodeCount - 1) / groupSize
+    var visibleGroup by remember(resetKey, playingGroup, groupCount) { mutableIntStateOf(playingGroup) }
+    if (groupCount > 1) {
+        val groupRowState = rememberLazyListState(initialFirstVisibleItemIndex = playingGroup)
+        LaunchedEffect(resetKey, playingGroup) {
+            groupRowState.scrollToItem(playingGroup)
+        }
+
+        LazyRow(
+            modifier = Modifier.fillMaxWidth().focusGroup(),
+            state = groupRowState,
+            horizontalArrangement = Arrangement.spacedBy(if (phoneLayout) 8.dp else 12.dp)
+        ) {
+            items(groupCount) { groupIndex ->
+                val first = groupIndex * groupSize + 1
+                val last = minOf(first + groupSize - 1, episodeCount)
+                val label = "第 $first–$last 集"
+                val selected = groupIndex == visibleGroup
+                if (phoneLayout) {
+                    PhoneSelectorChip(
+                        text = label,
+                        selected = selected,
+                        onClick = { visibleGroup = groupIndex }
+                    )
+                } else {
+                    TvDetailChoiceChip(
+                        text = label,
+                        selected = selected,
+                        showCurrentLabel = false,
+                        onClick = { visibleGroup = groupIndex }
+                    )
+                }
+            }
+        }
+        Spacer(modifier = Modifier.height(if (phoneLayout) 12.dp else 16.dp))
+    }
+
+    val first = visibleGroup * groupSize
+    content(first until minOf(first + groupSize, episodeCount))
+}
+
+internal fun Episode.displayLabel(index: Int): String {
     val raw = name.orEmpty().trim()
     val normalized = raw.lowercase()
     return when {
@@ -1581,6 +1638,7 @@ private fun PhoneSelectorChip(
 private fun TvDetailChoiceChip(
     text: String,
     selected: Boolean,
+    showCurrentLabel: Boolean = true,
     onClick: () -> Unit
 ) {
     val shape = RoundedCornerShape(8.dp)
@@ -1604,7 +1662,7 @@ private fun TvDetailChoiceChip(
         )
     ) {
         Text(
-            text = if (selected) "当前  $text" else text,
+            text = if (selected && showCurrentLabel) "当前  $text" else text,
             color = if (selected) AppTextPrimary else AppTextSecondary,
             fontSize = 14.sp,
             fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal,
@@ -1617,12 +1675,13 @@ private fun TvDetailChoiceChip(
 private fun TvEpisodeTile(
     text: String,
     selected: Boolean,
+    modifier: Modifier = Modifier,
     onClick: () -> Unit
 ) {
     val shape = RoundedCornerShape(8.dp)
     TvSurface(
         onClick = onClick,
-        modifier = Modifier
+        modifier = modifier
             .width(148.dp)
             .height(46.dp)
             .clip(shape)

@@ -18,11 +18,13 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.focusable
+import androidx.compose.foundation.focusGroup
 import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.horizontalScroll
@@ -42,6 +44,8 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.relocation.BringIntoViewRequester
+import androidx.compose.foundation.relocation.bringIntoViewRequester
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
@@ -49,6 +53,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableLongStateOf
@@ -56,6 +61,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -72,7 +78,6 @@ import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -83,10 +88,10 @@ import androidx.media3.common.Player
 import androidx.navigation.NavController
 import androidx.tv.material3.Icon
 import androidx.tv.material3.Text
-import com.loong.longtv.ui.shared.widgets.AppButton
+import com.loong.longtv.engine.source.model.Episode
+import com.loong.longtv.data.EpisodeSkipSettings
 import com.loong.longtv.ui.shared.widgets.TvSurface
 import com.loong.longtv.ui.theme.AppCardOverlay
-import com.loong.longtv.ui.theme.AppError
 import com.loong.longtv.ui.theme.AppSurfaceVariant
 import com.loong.longtv.ui.theme.AppTextMuted
 import com.loong.longtv.ui.theme.AppTextPrimary
@@ -110,7 +115,8 @@ import kotlin.math.roundToLong
 private enum class BottomPanel {
     SPEED,
     QUALITY,
-    EPISODE
+    EPISODE,
+    PLAYBACK_SETTINGS
 }
 
 @OptIn(ExperimentalLayoutApi::class)
@@ -124,10 +130,16 @@ internal fun FullscreenPlayerContent(
     episodeIndex: Int,
     episodeCount: Int,
     isTv: Boolean,
+    episodes: List<Episode> = emptyList(),
+    mediaIdentity: String = "episode-$episodeIndex",
     manageOrientation: Boolean = true,
     onExitFullscreen: ((Long) -> Unit)? = null,
     onSwitchEpisode: ((Int) -> Unit)? = null,
-    onPlaybackEnded: (() -> Unit)? = null,
+    onRetryPlayback: ((Long) -> Unit)? = null,
+    onSwitchLine: ((Long) -> Unit)? = null,
+    onSearchSameTitle: ((Long) -> Unit)? = null,
+    episodeSkipSettings: EpisodeSkipSettings? = null,
+    onSaveEpisodeSkipSettings: ((EpisodeSkipSettings) -> Unit)? = null,
     onProgressChangedExternal: ((Long, Long) -> Unit)? = null
 ) {
     val context = LocalContext.current
@@ -140,6 +152,15 @@ internal fun FullscreenPlayerContent(
     var currentPositionMs by remember(videoUrl, episodeIndex, initialPositionMs) {
         mutableLongStateOf(initialPositionMs)
     }
+    var episodeSwitchPending by remember(mediaIdentity, videoUrl) { mutableStateOf(false) }
+    var retryCount by remember(mediaIdentity, videoUrl) { mutableIntStateOf(0) }
+    var retryPosition by remember(mediaIdentity, videoUrl) { mutableLongStateOf(initialPositionMs) }
+    var introChecked by remember(mediaIdentity, videoUrl, retryCount) { mutableStateOf(false) }
+    var skipOutroCompleted by remember(mediaIdentity, videoUrl, retryCount) { mutableStateOf(false) }
+    var editedOutro by remember(mediaIdentity, videoUrl, retryCount) { mutableStateOf<EpisodeSkipSettings?>(null) }
+    var settingsPositionMs by remember(mediaIdentity, videoUrl) { mutableLongStateOf(0L) }
+    var settingsOpenCount by remember(mediaIdentity, videoUrl) { mutableIntStateOf(0) }
+    var resumeAfterSettings by remember(mediaIdentity, videoUrl) { mutableStateOf(false) }
     var durationMs by remember(title, videoUrl) { mutableLongStateOf(0L) }
     var isPlaying by remember(title, videoUrl) { mutableStateOf(false) }
     var isBuffering by remember(title, videoUrl) { mutableStateOf(false) }
@@ -191,9 +212,17 @@ internal fun FullscreenPlayerContent(
         interactionState.showControls()
     }
 
+    fun closePanel() {
+        if (activePanel == BottomPanel.PLAYBACK_SETTINGS && resumeAfterSettings) {
+            resumeAfterSettings = false
+            controlState.play()
+        }
+        activePanel = null
+    }
+
     fun hideControls() {
         if (activePanel != null || displayedPanel != null) {
-            activePanel = null
+            closePanel()
         } else {
             interactionState.hideControls()
         }
@@ -212,8 +241,17 @@ internal fun FullscreenPlayerContent(
         registerInteraction()
     }
 
-    fun closePanel() {
-        activePanel = null
+    fun openPlaybackSettings() {
+        if (durationMs <= 0L || !playerReady || isBuffering) {
+            showTransientMessage("视频加载完成后可设置片头片尾")
+            return
+        }
+        settingsPositionMs = currentPositionMs.coerceIn(0L, durationMs)
+        settingsOpenCount++
+        resumeAfterSettings = isPlaying
+        controlState.pause()
+        activePanel = BottomPanel.PLAYBACK_SETTINGS
+        registerInteraction()
     }
 
     fun seekToPosition(positionMs: Long) {
@@ -308,6 +346,8 @@ internal fun FullscreenPlayerContent(
     }
 
     fun switchEpisode(targetIndex: Int) {
+        if (episodeSwitchPending || targetIndex !in 0 until episodeCount || targetIndex == episodeIndex) return
+        episodeSwitchPending = true
         activePanel = null
         interactionState.clearFeedback()
         interactionState.cancelGesture()
@@ -322,9 +362,6 @@ internal fun FullscreenPlayerContent(
         navController.previousBackStackEntry
             ?.savedStateHandle
             ?.set("fullscreen_reenter", true)
-        navController.previousBackStackEntry
-            ?.savedStateHandle
-            ?.set("fullscreen_position", 0L)
         navController.popBackStack()
     }
 
@@ -332,8 +369,37 @@ internal fun FullscreenPlayerContent(
         val targetIndex = episodeIndex + 1
         if (targetIndex in 0 until episodeCount) {
             switchEpisode(targetIndex)
-        } else {
-            onPlaybackEnded?.invoke()
+        } else if (!episodeSwitchPending) {
+            episodeSwitchPending = true
+            exitFullscreen()
+        }
+    }
+
+    LaunchedEffect(
+        episodeSkipSettings, currentPositionMs, durationMs, isPlaying, activePanel,
+        episodeSwitchPending, playbackError, interactionState.isScrubbing, editedOutro
+    ) {
+        val settings = episodeSkipSettings ?: return@LaunchedEffect
+        if (!isPlaying || activePanel == BottomPanel.PLAYBACK_SETTINGS ||
+            episodeSwitchPending || playbackError != null || interactionState.isScrubbing
+        ) return@LaunchedEffect
+        val hasNext = episodeIndex + 1 < episodeCount
+        val range = settings.playbackRange(durationMs, hasNext) ?: return@LaunchedEffect
+        if (!introChecked) {
+            introChecked = true
+            if (currentPositionMs < range.first) {
+                controlState.seekTo(range.first)
+                return@LaunchedEffect
+            }
+        }
+        if (editedOutro != null) {
+            if (editedOutro == settings && currentPositionMs < range.last) editedOutro = null
+            return@LaunchedEffect
+        }
+        if (hasNext && settings.outroRemainingMs != null && currentPositionMs in range.last until durationMs) {
+            skipOutroCompleted = true
+            onProgressChangedExternal?.invoke(durationMs, durationMs)
+            playNextEpisodeFromCurrent()
         }
     }
 
@@ -426,7 +492,7 @@ internal fun FullscreenPlayerContent(
     }
 
     BackHandler {
-        if (!handleTvBack()) {
+        if (playbackError != null || !handleTvBack()) {
             exitFullscreen()
         }
     }
@@ -521,6 +587,7 @@ internal fun FullscreenPlayerContent(
                         .focusRequester(tvFocusRequester)
                         .focusable()
                         .onPreviewKeyEvent { event ->
+                            if (playbackError != null) return@onPreviewKeyEvent false
                             val controlsVisible = interactionState.controlsVisible || activePanel != null
                             if (event.nativeKeyEvent.action == android.view.KeyEvent.ACTION_UP) {
                                 return@onPreviewKeyEvent when (event.nativeKeyEvent.keyCode) {
@@ -598,8 +665,8 @@ internal fun FullscreenPlayerContent(
             modifier = Modifier.fillMaxSize(),
             videoUrl = videoUrl,
             requestHeaders = requestHeaders,
-            mediaIdentity = "episode-$episodeIndex",
-            initialPositionMs = initialPositionMs,
+            mediaIdentity = if (retryCount == 0) mediaIdentity else "$mediaIdentity#retry-$retryCount",
+            initialPositionMs = if (retryCount == 0) initialPositionMs else retryPosition,
             repeat = false,
             showController = false,
             enableNativeController = false,
@@ -607,10 +674,12 @@ internal fun FullscreenPlayerContent(
             sharedSessionReleaseDelayMs = 5_000L,
             controlState = controlState,
             onProgressChanged = { position, duration ->
-                currentPositionMs = position
-                durationMs = duration
-                onProgressChangedExternal?.invoke(position, duration)
-                interactionState.syncPlaybackPosition(position)
+                if (playbackError == null) {
+                    currentPositionMs = position
+                    durationMs = duration
+                    if (!skipOutroCompleted) onProgressChangedExternal?.invoke(position, duration)
+                    interactionState.syncPlaybackPosition(position)
+                }
             },
             onPlaybackStateChanged = { state ->
                 isBuffering = state == Player.STATE_BUFFERING
@@ -624,6 +693,10 @@ internal fun FullscreenPlayerContent(
             onPlaybackEnded = ::playNextEpisodeFromCurrent,
             onPlaybackError = { message ->
                 playbackError = message
+                activePanel = null
+                remoteSeekJob?.cancel()
+                remoteSeekDirection = 0
+                interactionState.cancelGesture()
                 interactionState.showControls()
             },
             onSurfaceTap = null
@@ -720,7 +793,7 @@ internal fun FullscreenPlayerContent(
             }
         }
 
-        if (interactionState.controlsVisible || activePanel != null || displayedPanel != null) {
+        if (playbackError == null && (interactionState.controlsVisible || activePanel != null || displayedPanel != null)) {
             val topBarHeight = if (isTv) 64.dp else 48.dp
             val progressBarHeight = if (isTv) 52.dp else 42.dp
             val bottomBarHeight = if (isTv) 44.dp else 52.dp
@@ -936,6 +1009,9 @@ internal fun FullscreenPlayerContent(
                         large = isTv,
                         onClick = { togglePanel(BottomPanel.EPISODE) }
                     )
+                    if (isTv && episodeSkipSettings != null && onSaveEpisodeSkipSettings != null) {
+                        PlayerActionChip(text = "播放设置", large = true, onClick = ::openPlaybackSettings)
+                    }
                 }
             }
 
@@ -980,11 +1056,27 @@ internal fun FullscreenPlayerContent(
                         selectedQuality = selectedQuality,
                         episodeIndex = episodeIndex,
                         episodeCount = episodeCount,
+                        episodes = episodes,
                         speedOptions = speedOptions,
                         qualityOptions = qualityOptions,
                         speedFocusRequester = tvSpeedPanelFocusRequester,
                         qualityFocusRequester = tvQualityPanelFocusRequester,
                         episodeFocusRequester = tvEpisodePanelFocusRequester,
+                        episodeSkipSettings = episodeSkipSettings,
+                        settingsPositionMs = settingsPositionMs,
+                        settingsOpenCount = settingsOpenCount,
+                        durationMs = durationMs,
+                        onSaveEpisodeSkipSettings = { settings ->
+                            introChecked = true
+                            if (settings.outroRemainingMs != null) {
+                                editedOutro = settings
+                            } else {
+                                editedOutro = null
+                            }
+                            onSaveEpisodeSkipSettings?.invoke(settings)
+                            closePanel()
+                            showTransientMessage("片头片尾已保存")
+                        },
                         onClose = ::closePanel,
                         onSpeedSelected = { speed ->
                             playbackSpeed = speed
@@ -1009,50 +1101,41 @@ internal fun FullscreenPlayerContent(
             }
         }
 
-        if (playbackError != null) {
-            Column(
-                modifier = Modifier
-                    .align(Alignment.Center)
-                    .clip(RoundedCornerShape(24.dp))
-                    .background(AppCardOverlay)
-                    .padding(horizontal = 24.dp, vertical = 20.dp),
-                verticalArrangement = Arrangement.spacedBy(12.dp),
-                horizontalAlignment = Alignment.CenterHorizontally
-            ) {
-                Text(
-                    text = playbackError ?: "播放失败",
-                    color = AppError,
-                    fontSize = if (isTv) 18.sp else 15.sp,
-                    fontWeight = FontWeight.SemiBold,
-                    textAlign = TextAlign.Center
-                )
-                Text(
-                    text = "当前地址可能不是直链，或站点还需要进一步解析。",
-                    color = AppTextMuted,
-                    fontSize = if (isTv) 14.sp else 12.sp,
-                    textAlign = TextAlign.Center
-                )
-                FlowRow(
-                    horizontalArrangement = Arrangement.spacedBy(12.dp),
-                    verticalArrangement = Arrangement.spacedBy(12.dp)
-                ) {
-                    AppButton(
-                        text = "重试",
-                        onClick = {
-                            playbackError = null
-                            interactionState.showControls()
-                            currentPositionMs = 0L
-                            switchEpisode(episodeIndex)
-                        }
-                    )
-                    AppButton(text = "返回详情", onClick = ::exitFullscreen)
-                }
-            }
+        playbackError?.let { error ->
+            FullscreenPlaybackFailure(
+                message = error,
+                isTv = isTv,
+                modifier = Modifier.align(Alignment.Center),
+                onRetry = {
+                    onProgressChangedExternal?.invoke(currentPositionMs, durationMs)
+                    if (onRetryPlayback != null) {
+                        onRetryPlayback(currentPositionMs)
+                    } else {
+                        retryPosition = currentPositionMs
+                        retryCount++
+                        playbackError = null
+                        playerReady = false
+                    }
+                },
+                onSwitchLine = onSwitchLine?.let { switch ->
+                    {
+                        onProgressChangedExternal?.invoke(currentPositionMs, durationMs)
+                        switch(currentPositionMs)
+                    }
+                },
+                onSearch = onSearchSameTitle?.let { search ->
+                    {
+                        onProgressChangedExternal?.invoke(currentPositionMs, durationMs)
+                        search(currentPositionMs)
+                    }
+                },
+                onBack = ::exitFullscreen
+            )
         }
     }
 }
 
-@OptIn(ExperimentalLayoutApi::class)
+@OptIn(ExperimentalLayoutApi::class, ExperimentalFoundationApi::class)
 @Composable
 private fun PlayerOptionPanel(
     panel: BottomPanel,
@@ -1061,11 +1144,17 @@ private fun PlayerOptionPanel(
     selectedQuality: String,
     episodeIndex: Int,
     episodeCount: Int,
+    episodes: List<Episode>,
     speedOptions: List<Float>,
     qualityOptions: List<String>,
     speedFocusRequester: FocusRequester,
     qualityFocusRequester: FocusRequester,
     episodeFocusRequester: FocusRequester,
+    episodeSkipSettings: EpisodeSkipSettings?,
+    settingsPositionMs: Long,
+    settingsOpenCount: Int,
+    durationMs: Long,
+    onSaveEpisodeSkipSettings: (EpisodeSkipSettings) -> Unit,
     onClose: () -> Unit,
     onSpeedSelected: (Float) -> Unit,
     onQualitySelected: (String) -> Unit,
@@ -1079,6 +1168,7 @@ private fun PlayerOptionPanel(
                 BottomPanel.SPEED -> speedFocusRequester.requestFocus()
                 BottomPanel.QUALITY -> qualityFocusRequester.requestFocus()
                 BottomPanel.EPISODE -> episodeFocusRequester.requestFocus()
+                BottomPanel.PLAYBACK_SETTINGS -> Unit
             }
         }
     }
@@ -1108,6 +1198,7 @@ private fun PlayerOptionPanel(
                     BottomPanel.SPEED -> "倍速设置"
                     BottomPanel.QUALITY -> "清晰度设置"
                     BottomPanel.EPISODE -> "选集"
+                    BottomPanel.PLAYBACK_SETTINGS -> "片头片尾"
                 },
                 color = AppTextPrimary,
                 fontSize = if (isTv) 18.sp else 15.sp,
@@ -1115,6 +1206,7 @@ private fun PlayerOptionPanel(
             )
             PlayerPanelCloseButton(
                 large = isTv,
+                label = if (panel == BottomPanel.PLAYBACK_SETTINGS) "取消" else "收起",
                 onClick = onClose
             )
         }
@@ -1153,36 +1245,54 @@ private fun PlayerOptionPanel(
                 }
             }
 
+            BottomPanel.PLAYBACK_SETTINGS -> {
+                if (episodeSkipSettings != null && durationMs > 0L) {
+                    key(settingsOpenCount) {
+                        EpisodeSkipEditor(episodeSkipSettings, settingsPositionMs, durationMs, onSaveEpisodeSkipSettings)
+                    }
+                }
+            }
+
             BottomPanel.EPISODE -> {
-                val episodeScrollState = rememberScrollState()
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .heightIn(max = if (isTv) 244.dp else 204.dp)
-                        .verticalScroll(episodeScrollState)
-                ) {
-                    FlowRow(
-                        modifier = Modifier.padding(start = 6.dp, top = 6.dp, end = 6.dp, bottom = 8.dp),
-                        horizontalArrangement = Arrangement.spacedBy(10.dp),
-                        verticalArrangement = Arrangement.spacedBy(10.dp)
+                GroupedEpisodes(episodeCount, episodeIndex, phoneLayout = !isTv, resetKey = episodes) { visibleIndices ->
+                    val episodeScrollState = rememberScrollState()
+                    val currentEpisodeRequester = remember { BringIntoViewRequester() }
+                    LaunchedEffect(visibleIndices) {
+                        episodeScrollState.scrollTo(0)
+                        if (!isTv && episodeIndex in visibleIndices) {
+                            withFrameNanos { }
+                            currentEpisodeRequester.bringIntoView()
+                        }
+                    }
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .heightIn(max = if (isTv) 244.dp else 204.dp)
+                            .verticalScroll(episodeScrollState)
                     ) {
-                        repeat(episodeCount) { index ->
-                            val focusModifier = if (isTv && index == episodeIndex) {
-                                Modifier.focusRequester(episodeFocusRequester)
-                            } else {
-                                Modifier
+                        FlowRow(
+                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 6.dp),
+                            horizontalArrangement = Arrangement.spacedBy(10.dp),
+                            verticalArrangement = Arrangement.spacedBy(10.dp)
+                        ) {
+                            for (index in visibleIndices) {
+                                val focusModifier = when {
+                                    index != episodeIndex -> Modifier
+                                    isTv -> Modifier.focusRequester(episodeFocusRequester)
+                                    else -> Modifier.bringIntoViewRequester(currentEpisodeRequester)
+                                }
+                                PlayerPanelChip(
+                                    modifier = Modifier
+                                        .width(if (isTv) 128.dp else 104.dp)
+                                        .height(if (isTv) 48.dp else 38.dp)
+                                        .then(focusModifier),
+                                    text = episodes.getOrNull(index)?.displayLabel(index) ?: "第${index + 1}集",
+                                    selected = index == episodeIndex,
+                                    large = isTv,
+                                    fillContainer = true,
+                                    onClick = { onEpisodeSelected(index) }
+                                )
                             }
-                            PlayerPanelChip(
-                                modifier = Modifier
-                                    .width(if (isTv) 108.dp else 78.dp)
-                                    .height(if (isTv) 48.dp else 38.dp)
-                                    .then(focusModifier),
-                                text = "第${index + 1}集",
-                                selected = index == episodeIndex,
-                                large = isTv,
-                                fillContainer = true,
-                                onClick = { onEpisodeSelected(index) }
-                            )
                         }
                     }
                 }
@@ -1192,8 +1302,90 @@ private fun PlayerOptionPanel(
 }
 
 @Composable
+@OptIn(ExperimentalLayoutApi::class)
+private fun EpisodeSkipEditor(
+    settings: EpisodeSkipSettings,
+    capturedPositionMs: Long,
+    durationMs: Long,
+    onSave: (EpisodeSkipSettings) -> Unit
+) {
+    var editingOutro by remember { mutableStateOf(false) }
+    var introEnd by remember { mutableStateOf(settings.introEndMs) }
+    var outroStart by remember { mutableStateOf(settings.outroRemainingMs?.let { durationMs - it }) }
+    val firstItem = remember { FocusRequester() }
+    LaunchedEffect(firstItem) {
+        withFrameNanos { }
+        firstItem.requestFocus()
+    }
+    val selectedTime = if (editingOutro) outroStart else introEnd
+    fun setTime(timeMs: Long?) {
+        if (editingOutro) outroStart = timeMs else introEnd = timeMs
+    }
+    fun adjust(deltaMs: Long) {
+        val start = selectedTime ?: if (editingOutro) durationMs else 0L
+        setTime((start + deltaMs).coerceIn(0L, durationMs))
+    }
+    val normalizedIntro = introEnd?.takeUnless { it == 0L }
+    val normalizedOutro = outroStart?.takeUnless { it == durationMs }
+    val draft = EpisodeSkipSettings(normalizedIntro, normalizedOutro?.let { durationMs - it })
+    val canSave = draft.playbackRange(durationMs, hasNextEpisode = true) != null
+
+    Column(
+        modifier = Modifier.fillMaxWidth().focusGroup(),
+        verticalArrangement = Arrangement.spacedBy(10.dp)
+    ) {
+        Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            PlayerPanelChip(
+                modifier = Modifier.focusRequester(firstItem),
+                text = "片头结束  ${skipTimeLabel(introEnd)}",
+                selected = !editingOutro,
+                large = true,
+                onClick = { editingOutro = false }
+            )
+            PlayerPanelChip(
+                text = "片尾开始  ${skipTimeLabel(outroStart)}",
+                selected = editingOutro,
+                large = true,
+                onClick = { editingOutro = true }
+            )
+        }
+        FlowRow(
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            PlayerActionChip(text = "用当前位置 ${formatPlayerTime(capturedPositionMs)}", large = true,
+                onClick = { setTime(capturedPositionMs) })
+            PlayerActionChip(text = "−10 秒", large = true, onClick = { adjust(-10_000L) })
+            PlayerActionChip(text = "+10 秒", large = true, onClick = { adjust(10_000L) })
+            PlayerActionChip(text = "关闭此项", large = true, onClick = { setTime(null) })
+        }
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(14.dp)
+        ) {
+            PlayerPanelChip(text = "保存", selected = canSave, large = true, onClick = {
+                if (canSave) onSave(draft)
+            })
+            Text(
+                text = if (canSave) "应用到本剧" else "请在片头结束与片尾开始之间留出至少 1 秒",
+                color = if (canSave) AppTextMuted else AppTextPrimary,
+                fontSize = 14.sp
+            )
+        }
+    }
+}
+
+private fun skipTimeLabel(positionMs: Long?): String =
+    when {
+        positionMs == null -> "关闭"
+        positionMs < 0L -> "超出本集时长"
+        else -> formatPlayerTime(positionMs)
+    }
+
+@Composable
 private fun PlayerPanelCloseButton(
     large: Boolean,
+    label: String,
     onClick: () -> Unit
 ) {
     TvSurface(onClick = onClick) {
@@ -1206,7 +1398,7 @@ private fun PlayerPanelCloseButton(
             contentAlignment = Alignment.Center
         ) {
             Text(
-                text = "收起",
+                text = label,
                 color = Color(0xFFE7ECF3),
                 fontSize = if (large) 15.sp else 12.sp,
                 fontWeight = FontWeight.SemiBold
@@ -1250,7 +1442,9 @@ private fun PlayerPanelChip(
                 text = text,
                 color = if (selected) BrandPrimary else AppTextPrimary,
                 fontSize = if (large) 15.sp else 13.sp,
-                fontWeight = FontWeight.SemiBold
+                fontWeight = FontWeight.SemiBold,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
             )
         }
     }

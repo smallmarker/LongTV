@@ -17,7 +17,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.net.toUri
-import androidx.media3.common.C
 import androidx.media3.common.MediaItem
 import androidx.media3.common.PlaybackException
 import androidx.media3.common.Player
@@ -104,15 +103,15 @@ fun ComposeVideoPlayer(
                     )
                 }
                 val item = itemBuilder.build()
-                player.setMediaItem(item)
+                if (liveStream) {
+                    player.setMediaItem(item)
+                } else {
+                    player.setMediaItem(item, initialPositionMs.coerceAtLeast(0L))
+                }
                 player.prepare()
-                // A new episode must always receive its own initial position. Seeking
-                // explicitly to 0 prevents the previous shared player's position
-                // from carrying over when the resolved stream URL is identical.
-                player.seekTo(initialPositionMs.coerceAtLeast(0L))
-                SharedPlayerSession.markPrepared(videoUrl, requestHeaders, mediaIdentity, cacheEnabled, liveStream)
-            } else if (initialPositionMs > 0 && player.currentPosition <= 0L) {
-                player.seekTo(initialPositionMs)
+                if (sharedSessionEnabled) {
+                    SharedPlayerSession.markPrepared(videoUrl, requestHeaders, mediaIdentity, cacheEnabled, liveStream)
+                }
             }
             player.playWhenReady = autoPlay
         } catch (error: Throwable) {
@@ -163,6 +162,8 @@ fun ComposeVideoPlayer(
             override fun onPlaybackStateChanged(playbackState: Int) {
                 latestOnPlaybackStateChanged?.invoke(playbackState)
                 if (playbackState == Player.STATE_ENDED) {
+                    val duration = player.duration
+                    if (duration > 0) latestOnProgressChanged(duration, duration)
                     latestOnPlaybackEnded?.invoke()
                 }
             }
@@ -172,10 +173,9 @@ fun ComposeVideoPlayer(
             }
 
             override fun onPlayerError(error: PlaybackException) {
-                if (liveStream && error.hasCause<BehindLiveWindowException>()) {
-                    Log.w("ComposeVideoPlayer", "live window drift recovered for url=$videoUrl")
-                    player.recoverLiveWindow(autoPlay)
-                    latestOnPlaybackStateChanged?.invoke(Player.STATE_BUFFERING)
+                if (liveStream && (error.errorCode == PlaybackException.ERROR_CODE_BEHIND_LIVE_WINDOW ||
+                        error.hasCause<BehindLiveWindowException>())) {
+                    Log.w("ComposeVideoPlayer", "playback fell behind live window for url=$videoUrl")
                     latestOnPlaybackError?.invoke(BEHIND_LIVE_WINDOW_ERROR)
                     return
                 }
@@ -196,24 +196,22 @@ fun ComposeVideoPlayer(
         player.volume = if (state.muted) 0f else state.volume
     }
 
-    LaunchedEffect(player, videoUrl) {
+    LaunchedEffect(player) {
         while (true) {
             delay(1_000)
             if (player.currentMediaItem != null) {
-                if (liveStream && player.shouldResyncLiveWindow()) {
-                    Log.w("ComposeVideoPlayer", "live offset too large, resync url=$videoUrl offset=${player.currentLiveOffset}")
-                    player.recoverLiveWindow(autoPlay)
-                    latestOnPlaybackStateChanged?.invoke(Player.STATE_BUFFERING)
+                if (player.playbackState != Player.STATE_ENDED) {
+                    latestOnProgressChanged(player.currentPosition, player.duration.coerceAtLeast(0))
                 }
-                latestOnProgressChanged(player.currentPosition, player.duration.coerceAtLeast(0))
             }
         }
     }
 
-    DisposableEffect(videoUrl, requestHeaders) {
+    DisposableEffect(player) {
+        val reportProgress = onProgressChanged
         onDispose {
-            if (player.currentMediaItem != null) {
-                latestOnProgressChanged(player.currentPosition, player.duration.coerceAtLeast(0))
+            if (player.currentMediaItem != null && player.playbackState != Player.STATE_ENDED) {
+                reportProgress(player.currentPosition, player.duration.coerceAtLeast(0))
             }
         }
     }
@@ -416,7 +414,6 @@ private const val DEFAULT_VIDEO_USER_AGENT = "LongTV/1.0 Android VideoPlayer"
 private const val LIVE_TARGET_OFFSET_MS = 30_000L
 private const val LIVE_MIN_OFFSET_MS = 15_000L
 private const val LIVE_MAX_OFFSET_MS = 60_000L
-private const val LIVE_RESYNC_OFFSET_MS = 75_000L
 private const val BEHIND_LIVE_WINDOW_ERROR = "BehindLiveWindowException"
 
 private fun PlaybackException.toUserMessage(): String {
@@ -429,18 +426,6 @@ private fun PlaybackException.toUserMessage(): String {
 
 private inline fun <reified T : Throwable> Throwable.hasCause(): Boolean {
     return generateSequence<Throwable>(this) { it.cause }.any { it is T }
-}
-
-private fun ExoPlayer.shouldResyncLiveWindow(): Boolean {
-    if (!isCurrentMediaItemLive) return false
-    val offset = currentLiveOffset
-    return offset != C.TIME_UNSET && offset > LIVE_RESYNC_OFFSET_MS
-}
-
-private fun ExoPlayer.recoverLiveWindow(autoPlay: Boolean) {
-    seekToDefaultPosition()
-    prepare()
-    playWhenReady = autoPlay
 }
 
 private object SharedPlayerSession {
@@ -468,7 +453,8 @@ private object SharedPlayerSession {
             refCount += 1
             existing
         } else {
-            existing?.release()
+            // An active composable still needs the old player to save its final position.
+            if (refCount == 0) existing?.release()
             val created = createExoPlayer(context.applicationContext, requestHeaders, repeat, cacheEnabled, liveStream)
             player = created
             attachedView = null

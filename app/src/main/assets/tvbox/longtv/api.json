@@ -2,13 +2,10 @@
     "spider": "",
     "lives": [
         {
-            "name": "线路①",
+            "name": "地方频道",
             "type": 0,
-            "url": "http://rihou.cc:567/gggg.nzk",
-            "playerType": 2,
-            "ua": "okhttp/3",
-            "epg": "https://epg.112114.eu.org/?ch={name}&date={date}",
-            "logo": "https://epg.112114.eu.org/logo/{name}.png"
+            "url": "./live/local-channels.txt",
+            "playerType": 2
         }
     ],
     "sites": [

@@ -4,6 +4,7 @@ import android.app.Activity
 import android.content.Context
 import android.content.ContextWrapper
 import android.content.pm.ActivityInfo
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -49,9 +50,12 @@ import com.loong.longtv.ui.shared.detail.DetailInfoBlock
 import com.loong.longtv.ui.shared.detail.DetailPreviewBlock
 import com.loong.longtv.ui.shared.detail.EpisodeGrid
 import com.loong.longtv.ui.shared.detail.FullscreenPlayerContent
+import com.loong.longtv.ui.shared.detail.FullscreenPlaybackFailure
+import com.loong.longtv.ui.shared.detail.PlaybackSearchResume
 import com.loong.player.PlayerLoadingOverlay
 import com.loong.longtv.ui.shared.detail.SourceRow
 import com.loong.longtv.ui.shared.detail.VideoDetailRouteContent
+import com.loong.longtv.ui.shared.detail.playbackIdentity
 import com.loong.longtv.ui.theme.AppTextMuted
 import com.loong.longtv.ui.theme.AppTextPrimary
 import com.loong.longtv.ui.theme.BrandPrimary
@@ -71,7 +75,7 @@ fun VideoDetailPhoneScreen(
         key = key,
         id = id,
         viewModel = viewModel
-    ) { state, detail, sources, selectedSource, playableMedia, _, _, onProgressChanged, onToggleFavorite, onPlayCurrent, onRetryCurrent, onClearError, onSelectSource, onSelectEpisode ->
+    ) { state, detail, sources, selectedSource, playableMedia, _, _, _, _, onProgressChanged, onToggleFavorite, onPlayCurrent, onRetryCurrent, onClearError, onSelectSource, onSelectEpisode ->
         VideoDetailPhoneContent(
             navigator = navigator,
             state = state,
@@ -85,7 +89,8 @@ fun VideoDetailPhoneScreen(
             onRetryCurrent = onRetryCurrent,
             onClearError = onClearError,
             onSelectSource = onSelectSource,
-            onSelectEpisode = onSelectEpisode
+            onSelectEpisode = onSelectEpisode,
+            onRecoverPlayback = viewModel::recoverFullscreenPlayback
         )
     }
 }
@@ -104,18 +109,19 @@ internal fun VideoDetailPhoneContent(
     onRetryCurrent: () -> Unit,
     onClearError: () -> Unit,
     onSelectSource: (Int) -> Unit,
-    onSelectEpisode: (PlayLine, Int) -> Unit
+    onSelectEpisode: (PlayLine, Int) -> Unit,
+    onRecoverPlayback: (Long, Boolean) -> Unit
 ) {
-    val sessionKey = "${playableMedia?.url.orEmpty()}#${state.selectedEpisodeIndex}"
+    val mediaIdentity = detail.playbackIdentity(selectedSource, state.selectedEpisodeIndex, state.playbackSessionId)
+    val sessionKey = "$mediaIdentity#${playableMedia?.url.orEmpty()}"
     var currentPositionMs by rememberSaveable(sessionKey) { mutableLongStateOf(state.resumePositionMs) }
-    var durationMs by rememberSaveable(sessionKey) { mutableLongStateOf(0L) }
     var fullscreenVisible by rememberSaveable { mutableStateOf(false) }
     var fullscreenExiting by rememberSaveable { mutableStateOf(false) }
+    var searchResumePositionMs by rememberSaveable { mutableStateOf<Long?>(null) }
     var fullscreenInitialPositionMs by rememberSaveable(sessionKey) { mutableLongStateOf(state.resumePositionMs) }
 
     fun saveLocalProgress(positionMs: Long, duration: Long) {
         currentPositionMs = positionMs
-        durationMs = duration
         onProgressChanged(positionMs, duration)
     }
 
@@ -127,6 +133,14 @@ internal fun VideoDetailPhoneContent(
         val title = detail.name.ifBlank { "全屏播放" }
         val episodeName = episodeTitle()
         return if (episodeName.isBlank()) title else "$title - $episodeName"
+    }
+
+    val searchSameTitle: ((Long) -> Unit)? = detail.name.takeIf { it.isNotBlank() }?.let {
+        { position ->
+            currentPositionMs = position
+            searchResumePositionMs = position
+            fullscreenExiting = true
+        }
     }
 
     fun playNextEpisodeFromCurrent() {
@@ -163,6 +177,7 @@ internal fun VideoDetailPhoneContent(
                         resumePositionMs = currentPositionMs,
                         selectedSource = selectedSource,
                         selectedEpisodeIndex = state.selectedEpisodeIndex,
+                        mediaIdentity = mediaIdentity,
                         sharedSessionReleaseDelayMs = 5_000L,
                         onBack = { navigator.popBackStack() },
                         onOpenFullscreen = { media, _, positionMs ->
@@ -232,6 +247,10 @@ internal fun VideoDetailPhoneContent(
                 onExitAnimationFinished = {
                     fullscreenVisible = false
                     fullscreenExiting = false
+                    searchResumePositionMs?.let { position ->
+                        searchResumePositionMs = null
+                        PlaybackSearchResume.openSearch(navigator, detail, selectedSource, state.selectedEpisodeIndex, position)
+                    }
                 }
             )
             Box(
@@ -249,10 +268,12 @@ internal fun VideoDetailPhoneContent(
                         initialPositionMs = fullscreenInitialPositionMs,
                         episodeIndex = state.selectedEpisodeIndex,
                         episodeCount = selectedSource?.episodes?.size ?: 0,
+                        episodes = selectedSource?.episodes.orEmpty(),
                         isTv = false,
+                        mediaIdentity = mediaIdentity,
                         manageOrientation = false,
                         onExitFullscreen = { positionMs ->
-                            saveLocalProgress(positionMs, durationMs)
+                            currentPositionMs = positionMs
                             fullscreenExiting = true
                         },
                         onSwitchEpisode = { targetIndex ->
@@ -263,11 +284,29 @@ internal fun VideoDetailPhoneContent(
                                 onSelectEpisode(source, targetIndex)
                             }
                         },
-                        onPlaybackEnded = ::playNextEpisodeFromCurrent,
+                        onRetryPlayback = { onRecoverPlayback(it, false) },
+                        onSwitchLine = if (sources.size > 1) ({ onRecoverPlayback(it, true) }) else null,
+                        onSearchSameTitle = searchSameTitle,
                         onProgressChangedExternal = ::saveLocalProgress
                     )
                 } else {
-                    PlayerLoadingOverlay()
+                    BackHandler { fullscreenExiting = true }
+                    val error = state.error ?: playableMedia?.let { "当前线路暂时无法播放" }
+                    if (error != null && !state.playerLoading) {
+                        FullscreenPlaybackFailure(
+                            message = error,
+                            isTv = false,
+                            modifier = Modifier.align(Alignment.Center),
+                            onRetry = { onRecoverPlayback(state.resumePositionMs, false) },
+                            onSwitchLine = if (sources.size > 1) {
+                                { onRecoverPlayback(state.resumePositionMs, true) }
+                            } else null,
+                            onSearch = searchSameTitle?.let { search -> { search(state.resumePositionMs) } },
+                            onBack = { fullscreenExiting = true }
+                        )
+                    } else {
+                        PlayerLoadingOverlay()
+                    }
                 }
             }
         }

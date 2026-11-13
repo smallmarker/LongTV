@@ -23,6 +23,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -44,6 +45,7 @@ import com.loong.longtv.ui.shared.detail.VideoDetailUiState
 import com.loong.longtv.ui.shared.detail.VideoDetailViewModel
 import com.loong.longtv.ui.shared.detail.DetailInfoBlock
 import com.loong.longtv.ui.shared.detail.DetailPreviewBlock
+import com.loong.longtv.ui.shared.detail.playbackIdentity
 import com.loong.longtv.ui.shared.detail.EpisodeGrid
 import com.loong.longtv.ui.shared.detail.SourceRow
 import com.loong.longtv.ui.shared.detail.VideoDetailRouteContent
@@ -67,7 +69,7 @@ fun VideoDetailTvScreen(
         key = key,
         id = id,
         viewModel = viewModel
-    ) { state, detail, sources, selectedSource, playableMedia, openingFullscreen, onOpenFullscreen, onProgressChanged, onToggleFavorite, onPlayCurrent, onRetryCurrent, onClearError, onSelectSource, onSelectEpisode ->
+    ) { state, detail, sources, selectedSource, playableMedia, openingFullscreen, restoreEpisodeFocus, onEpisodeFocusRestored, onOpenFullscreen, onProgressChanged, onToggleFavorite, onPlayCurrent, onRetryCurrent, onClearError, onSelectSource, onSelectEpisode ->
         VideoDetailTvContent(
             navigator = navigator,
             state = state,
@@ -76,6 +78,8 @@ fun VideoDetailTvScreen(
             selectedSource = selectedSource,
             playableMedia = playableMedia,
             openingFullscreen = openingFullscreen,
+            restoreEpisodeFocus = restoreEpisodeFocus,
+            onEpisodeFocusRestored = onEpisodeFocusRestored,
             onOpenFullscreen = onOpenFullscreen,
             onProgressChanged = onProgressChanged,
             onToggleFavorite = onToggleFavorite,
@@ -97,6 +101,8 @@ internal fun VideoDetailTvContent(
     selectedSource: PlayLine?,
     playableMedia: PlayableMedia?,
     openingFullscreen: Boolean,
+    restoreEpisodeFocus: Boolean,
+    onEpisodeFocusRestored: () -> Unit,
     onOpenFullscreen: (PlayableMedia, String, Long) -> Unit,
     onProgressChanged: (Long, Long) -> Unit,
     onToggleFavorite: () -> Unit,
@@ -107,10 +113,11 @@ internal fun VideoDetailTvContent(
     onSelectEpisode: (PlayLine, Int) -> Unit
 ) {
     val episodeName = selectedSource?.episodes?.getOrNull(state.selectedEpisodeIndex)?.name.orEmpty()
+    val mediaIdentity = detail.playbackIdentity(selectedSource, state.selectedEpisodeIndex, state.playbackSessionId)
     val canOpenFullscreen = playableMedia != null &&
         !playableMedia.needsParse() &&
         playableMedia.url.isNotBlank()
-    var currentPositionMs by remember(playableMedia?.url, state.selectedEpisodeIndex) {
+    var currentPositionMs by remember(playableMedia?.url, mediaIdentity) {
         mutableLongStateOf(state.resumePositionMs)
     }
     var durationMs by remember(playableMedia?.url, state.selectedEpisodeIndex) {
@@ -118,6 +125,7 @@ internal fun VideoDetailTvContent(
     }
     var previewFocused by remember(playableMedia?.url, state.selectedEpisodeIndex) { mutableStateOf(false) }
     val previewFocusRequester = remember(playableMedia?.url, state.selectedEpisodeIndex) { FocusRequester() }
+    var initialPreviewFocusHandled by rememberSaveable(detail.id) { mutableStateOf(false) }
 
     fun saveLocalProgress(positionMs: Long, duration: Long) {
         currentPositionMs = positionMs
@@ -129,13 +137,15 @@ internal fun VideoDetailTvContent(
         val source = selectedSource ?: return
         val targetIndex = state.selectedEpisodeIndex + 1
         if (targetIndex !in source.episodes.indices) return
-        saveLocalProgress(0L, 0L)
         onSelectEpisode(source, targetIndex)
     }
 
-    LaunchedEffect(canOpenFullscreen, playableMedia?.url, state.selectedEpisodeIndex) {
-        if (canOpenFullscreen) {
+    LaunchedEffect(canOpenFullscreen, openingFullscreen, restoreEpisodeFocus) {
+        if (restoreEpisodeFocus) {
+            initialPreviewFocusHandled = true
+        } else if (canOpenFullscreen && !openingFullscreen && !initialPreviewFocusHandled) {
             previewFocusRequester.requestFocus()
+            initialPreviewFocusHandled = true
         }
     }
 
@@ -200,11 +210,12 @@ internal fun VideoDetailTvContent(
                         DetailPreviewBlock(
                             modifier = Modifier.fillMaxSize(),
                             detail = detail,
-                            playableMedia = playableMedia,
+                            playableMedia = playableMedia.takeUnless { openingFullscreen },
                             playerLoading = state.playerLoading,
                             resumePositionMs = currentPositionMs,
                             selectedSource = selectedSource,
                             selectedEpisodeIndex = state.selectedEpisodeIndex,
+                            mediaIdentity = mediaIdentity,
                             sharedSessionReleaseDelayMs = if (openingFullscreen) 5_000L else 0L,
                             onBack = { navigator.popBackStack() },
                             onOpenFullscreen = onOpenFullscreen,
@@ -272,6 +283,8 @@ internal fun VideoDetailTvContent(
                             phoneLayout = false,
                             playInfo = selectedSource,
                             selectedIndex = state.selectedEpisodeIndex,
+                            restoreFocus = restoreEpisodeFocus,
+                            onFocusRestored = onEpisodeFocusRestored,
                             onSelect = onSelectEpisode
                         )
                     }

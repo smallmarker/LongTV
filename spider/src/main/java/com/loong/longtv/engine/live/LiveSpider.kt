@@ -1,5 +1,6 @@
 package com.loong.longtv.engine.live
 
+import android.content.Context
 import android.util.Log
 import com.github.catvod.net.OkHttp
 import com.loong.longtv.engine.source.model.LiveChannel
@@ -11,7 +12,8 @@ import kotlinx.coroutines.withContext
 import okhttp3.Headers
 import java.util.concurrent.TimeUnit
 
-class LiveSpider {
+class LiveSpider(context: Context) {
+    private val assets = context.applicationContext.assets
 
     suspend fun loadChannels(sources: List<LiveConfig>): Result<List<LiveChannel>> = withContext(Dispatchers.IO) {
         runCatching {
@@ -32,17 +34,11 @@ class LiveSpider {
     }
 
     private fun fetchSource(source: LiveConfig): Result<List<LiveChannel>> = runCatching {
-        val timeoutMs = source.timeout.coerceIn(3, 30) * 1000
-        val headers = Headers.Builder()
-            .apply { source.ua?.takeIf { it.isNotBlank() }?.let { add("User-Agent", it) } }
-            .build()
-        val client = OkHttp.client(timeoutMs)
-            .newBuilder()
-            .callTimeout(timeoutMs.toLong(), TimeUnit.MILLISECONDS)
-            .build()
-        val body = OkHttp.newCall(client, source.url, headers)
-            .execute()
-            .use { response -> if (response.isSuccessful) response.body?.string().orEmpty() else "" }
+        val body = if (source.url.startsWith("asset://")) {
+            assets.open(source.url.removePrefix("asset://")).bufferedReader().use { it.readText() }
+        } else {
+            fetchRemoteBody(source)
+        }
         if (body.isBlank()) {
             Log.w(TAG, "source=${source.name} returned empty body url=${source.url}")
             return@runCatching emptyList()
@@ -56,6 +52,20 @@ class LiveSpider {
         channels
     }.onFailure { error ->
         Log.w(TAG, "source=${source.name} failed url=${source.url}: ${error.message}", error)
+    }
+
+    private fun fetchRemoteBody(source: LiveConfig): String {
+        val timeoutMs = source.timeout.coerceIn(3, 30) * 1000
+        val headers = Headers.Builder()
+            .apply { source.ua?.takeIf { it.isNotBlank() }?.let { add("User-Agent", it) } }
+            .build()
+        val client = OkHttp.client(timeoutMs)
+            .newBuilder()
+            .callTimeout(timeoutMs.toLong(), TimeUnit.MILLISECONDS)
+            .build()
+        return OkHttp.newCall(client, source.url, headers)
+            .execute()
+            .use { response -> if (response.isSuccessful) response.body?.string().orEmpty() else "" }
     }
 
     companion object {

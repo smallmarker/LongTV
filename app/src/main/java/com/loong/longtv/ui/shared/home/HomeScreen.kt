@@ -25,6 +25,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.LazyListScope
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
@@ -38,6 +39,7 @@ import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -53,6 +55,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.navigation.NavController
+import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.tv.material3.ExperimentalTvMaterial3Api
 import androidx.tv.material3.Icon
 import androidx.tv.material3.Text
@@ -65,6 +68,7 @@ import com.loong.longtv.ui.shared.widgets.AppButton
 import com.loong.longtv.ui.shared.widgets.AppSearchFieldSurface
 import com.loong.longtv.ui.shared.widgets.TvSurface
 import com.loong.longtv.ui.shared.widgets.appFieldChrome
+import com.loong.longtv.ui.shared.widgets.restoreTvFocus
 import com.loong.longtv.ui.theme.AppError
 import com.loong.longtv.ui.theme.AppTextMuted
 import com.loong.longtv.ui.theme.AppTextPrimary
@@ -86,9 +90,13 @@ internal fun HomeScreenContent(
     val searchFocusRequester = remember { FocusRequester() }
     var searchFocused by remember { mutableStateOf(false) }
     var lastExitBackMs by remember { mutableLongStateOf(0L) }
+    val currentEntry by navController.currentBackStackEntryAsState()
+    var restoreCardKey by rememberSaveable { mutableStateOf<String?>(null) }
+    val activeRestoreKey = restoreCardKey.takeIf { isTv && currentEntry?.destination?.route == Screen.Home.route }
+    val rememberCard: (String?) -> Unit = { if (isTv) restoreCardKey = it }
 
     LaunchedEffect(isTv) {
-        if (isTv) searchFocusRequester.requestFocus()
+        if (isTv && restoreCardKey == null) searchFocusRequester.requestFocus()
     }
 
     BackHandler(enabled = isTv) {
@@ -137,15 +145,21 @@ internal fun HomeScreenContent(
             emptyText = "还没有观看记录",
             items = uiState.recentWatching,
             isTv = isTv,
+            restoreKey = activeRestoreKey,
+            rememberCard = rememberCard,
             onMore = { navController.navigate(Screen.History.route) },
             onItemClick = { item ->
                 navController.navigate(Screen.VideoDetail.createRoute(item.siteKey, item.videoId))
             }
         )
 
-        PopularRailSection(
+        VideoRailSection(
+            title = "热门影视",
+            emptyText = "暂无热门影视",
             items = uiState.popularVideos,
             isTv = isTv,
+            restoreKey = activeRestoreKey,
+            rememberCard = rememberCard,
             onMore = { navController.navigate(Screen.Popular.route) },
             onItemClick = { video ->
                 if (uiState.popularVideosRequireSearch) {
@@ -161,6 +175,8 @@ internal fun HomeScreenContent(
             emptyText = "暂无少儿教育内容",
             items = uiState.childEducationVideos,
             isTv = isTv,
+            restoreKey = activeRestoreKey,
+            rememberCard = rememberCard,
             onMore = { navController.navigate(Screen.ChildEducation.route) },
             onItemClick = { video ->
                 navController.navigate(Screen.VideoDetail.createRoute(video.siteKey, video.id))
@@ -172,6 +188,8 @@ internal fun HomeScreenContent(
             emptyText = ContentSection.CourseEducation.emptyText,
             items = uiState.courseEducationVideos,
             isTv = isTv,
+            restoreKey = activeRestoreKey,
+            rememberCard = rememberCard,
             onMore = { navController.navigate(Screen.ContentSection.createRoute(ContentSection.CourseEducation.id)) },
             onItemClick = { video ->
                 navController.navigate(Screen.VideoDetail.createRoute(video.siteKey, video.id))
@@ -183,6 +201,8 @@ internal fun HomeScreenContent(
             emptyText = ContentSection.MusicConcert.emptyText,
             items = uiState.musicConcertVideos,
             isTv = isTv,
+            restoreKey = activeRestoreKey,
+            rememberCard = rememberCard,
             onMore = { navController.navigate(Screen.ContentSection.createRoute(ContentSection.MusicConcert.id)) },
             onItemClick = { video ->
                 navController.navigate(Screen.VideoDetail.createRoute(video.siteKey, video.id))
@@ -196,6 +216,8 @@ internal fun HomeScreenContent(
                 emptyText = "还没有收藏内容",
                 items = uiState.favorites,
                 isTv = isTv,
+                restoreKey = activeRestoreKey,
+                rememberCard = rememberCard,
                 onMore = { navController.navigate(Screen.Favorite.route) },
                 onItemClick = { item ->
                     navController.navigate(Screen.VideoDetail.createRoute(item.siteKey, item.videoId))
@@ -437,57 +459,13 @@ private fun HeaderSearchField(
 }
 
 @Composable
-private fun PopularRailSection(
-    items: List<VodInfo>,
-    isTv: Boolean,
-    onMore: () -> Unit,
-    onItemClick: (VodInfo) -> Unit,
-) {
-    val context = LocalContext.current
-    LaunchedEffect(items) {
-        prefetchSmartImages(
-            context = context,
-            models = items.map { it.poster },
-            limit = if (isTv) 8 else 6
-        )
-    }
-
-    Column {
-        HomeSectionHeader(
-            title = "热门影视",
-            isTv = isTv
-        )
-
-        if (items.isEmpty()) {
-            EmptyLine(text = "暂无热门影视", isTv = isTv)
-            return@Column
-        }
-
-        LazyRow(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(top = 12.dp),
-            horizontalArrangement = Arrangement.spacedBy(if (isTv) 18.dp else 12.dp),
-            contentPadding = PaddingValues(horizontal = if (isTv) 12.dp else 2.dp, vertical = if (isTv) 6.dp else 0.dp)
-        ) {
-            items(items, key = { "${it.siteKey}:${it.id}:${it.name}" }) { video ->
-                TvSurface(onClick = { onItemClick(video) }) {
-                    Box(modifier = Modifier.width(if (isTv) AppThemeTokens.TvPosterRailWidth else AppThemeTokens.PhonePosterRailWidth)) {
-                        VideoCard(video = video)
-                    }
-                }
-            }
-            morePosterItem(isTv, onMore)
-        }
-    }
-}
-
-@Composable
 private fun VideoRailSection(
     title: String,
     emptyText: String,
     items: List<VodInfo>,
     isTv: Boolean,
+    restoreKey: String?,
+    rememberCard: (String?) -> Unit,
     onMore: () -> Unit,
     onItemClick: (VodInfo) -> Unit,
 ) {
@@ -500,34 +478,10 @@ private fun VideoRailSection(
         )
     }
 
-    Column {
-        HomeSectionHeader(
-            title = title,
-            isTv = isTv
-        )
-
-        if (items.isEmpty()) {
-            EmptyLine(text = emptyText, isTv = isTv)
-            return@Column
-        }
-
-        LazyRow(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(top = 12.dp),
-            horizontalArrangement = Arrangement.spacedBy(if (isTv) 18.dp else 12.dp),
-            contentPadding = PaddingValues(horizontal = if (isTv) 12.dp else 2.dp, vertical = if (isTv) 6.dp else 0.dp)
-        ) {
-            items(items, key = { "${it.siteKey}:${it.id}:${it.name}" }) { video ->
-                TvSurface(onClick = { onItemClick(video) }) {
-                    Box(modifier = Modifier.width(if (isTv) AppThemeTokens.TvPosterRailWidth else AppThemeTokens.PhonePosterRailWidth)) {
-                        VideoCard(video = video)
-                    }
-                }
-            }
-            morePosterItem(isTv, onMore)
-        }
-    }
+    HomePosterRail(title, emptyText, items, isTv, restoreKey, rememberCard, onMore, onItemClick,
+        itemKey = { "${it.siteKey}:${it.id}:${it.name}" },
+        content = { VideoCard(it) }
+    )
 }
 
 @Composable
@@ -536,6 +490,8 @@ private fun MediaRailSection(
     emptyText: String,
     items: List<HomeMediaItem>,
     isTv: Boolean,
+    restoreKey: String?,
+    rememberCard: (String?) -> Unit,
     onMore: () -> Unit,
     onItemClick: (HomeMediaItem) -> Unit,
 ) {
@@ -548,6 +504,37 @@ private fun MediaRailSection(
         )
     }
 
+    HomePosterRail(title, emptyText, items, isTv, restoreKey, rememberCard, onMore, onItemClick,
+        itemKey = { "${it.siteKey}:${it.videoId}:${it.title}" },
+        content = { VideoCard(it.toVodInfo()) }
+    )
+}
+
+@Composable
+private fun <T> HomePosterRail(
+    title: String,
+    emptyText: String,
+    items: List<T>,
+    isTv: Boolean,
+    restoreKey: String?,
+    rememberCard: (String?) -> Unit,
+    onMore: () -> Unit,
+    onItemClick: (T) -> Unit,
+    itemKey: (T) -> String,
+    content: @Composable (T) -> Unit
+) {
+    val rowState = rememberLazyListState()
+    val restoreIndex = if (restoreKey?.startsWith("$title/") == true) {
+        items.indexOfFirst { "$title/${itemKey(it)}" == restoreKey }
+    } else {
+        -1
+    }
+    LaunchedEffect(restoreKey, restoreIndex) {
+        if (restoreIndex >= 0 && rowState.layoutInfo.visibleItemsInfo.none { it.index == restoreIndex }) {
+            rowState.scrollToItem(restoreIndex)
+        }
+    }
+
     Column {
         HomeSectionHeader(
             title = title,
@@ -560,16 +547,24 @@ private fun MediaRailSection(
         }
 
         LazyRow(
+            state = rowState,
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(top = 12.dp),
             horizontalArrangement = Arrangement.spacedBy(if (isTv) 18.dp else 12.dp),
             contentPadding = PaddingValues(horizontal = if (isTv) 12.dp else 2.dp, vertical = if (isTv) 6.dp else 0.dp)
         ) {
-            items(items, key = { "${it.siteKey}:${it.videoId}:${it.title}" }) { item ->
-                TvSurface(onClick = { onItemClick(item) }) {
+            items(items, key = itemKey) { item ->
+                val cardKey = "$title/${itemKey(item)}"
+                TvSurface(
+                    modifier = Modifier.restoreTvFocus(cardKey == restoreKey) { rememberCard(null) },
+                    onClick = {
+                        rememberCard(cardKey)
+                        onItemClick(item)
+                    }
+                ) {
                     Box(modifier = Modifier.width(if (isTv) AppThemeTokens.TvPosterRailWidth else AppThemeTokens.PhonePosterRailWidth)) {
-                        VideoCard(video = item.toVodInfo())
+                        content(item)
                     }
                 }
             }

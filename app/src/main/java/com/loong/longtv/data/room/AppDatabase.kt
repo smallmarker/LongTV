@@ -8,14 +8,15 @@ import com.loong.longtv.data.room.dao.WatchHistoryDao
 import com.loong.longtv.data.room.entity.FavoriteEntity
 import com.loong.longtv.data.room.entity.SearchHistoryEntity
 import com.loong.longtv.data.room.entity.WatchHistoryEntity
+import com.loong.longtv.data.room.entity.EpisodeProgressEntity
 
 /**
  * @author zl
  * @Date 2025/10/21
  **/
 @Database(
-    entities = [SearchHistoryEntity::class, WatchHistoryEntity::class, FavoriteEntity::class],
-    version = 3,
+    entities = [SearchHistoryEntity::class, WatchHistoryEntity::class, FavoriteEntity::class, EpisodeProgressEntity::class],
+    version = 4,
     exportSchema = false
 )
 abstract class AppDatabase : RoomDatabase(){

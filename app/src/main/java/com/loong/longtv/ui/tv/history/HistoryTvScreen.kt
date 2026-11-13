@@ -17,6 +17,10 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.navigation.compose.currentBackStackEntryAsState
+import com.loong.longtv.ui.shared.widgets.restoreTvFocus
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
@@ -82,6 +86,20 @@ fun HistoryTvScreen(
     var selectedKeys by remember { mutableStateOf(setOf<String>()) }
     var requestBatchFocus by remember { mutableStateOf(false) }
     val sections = remember(histories) { histories.toTvHistorySections() }
+    val listState = rememberLazyListState()
+    val currentEntry by navController.currentBackStackEntryAsState()
+    var restoreCardKey by rememberSaveable { mutableStateOf<String?>(null) }
+    val activeRestoreKey = restoreCardKey.takeIf { !editMode && currentEntry?.destination?.route == Screen.History.route }
+    val restoreSection = remember(sections, activeRestoreKey) {
+        if (activeRestoreKey == null) -1 else sections.indexOfFirst { section ->
+            section.items.any { it.historyKey == activeRestoreKey }
+        }
+    }
+    LaunchedEffect(activeRestoreKey, restoreSection) {
+        if (restoreSection >= 0 && listState.layoutInfo.visibleItemsInfo.none { it.index == restoreSection }) {
+            listState.scrollToItem(restoreSection)
+        }
+    }
     val batchPrimaryFocusRequester = remember { FocusRequester() }
 
     LaunchedEffect(histories, editMode) {
@@ -138,6 +156,7 @@ fun HistoryTvScreen(
         } else {
             Spacer(modifier = Modifier.height(28.dp))
             LazyColumn(
+                state = listState,
                 verticalArrangement = Arrangement.spacedBy(18.dp)
             ) {
                 items(sections, key = { it.key }) { section ->
@@ -145,6 +164,8 @@ fun HistoryTvScreen(
                         section = section,
                         editMode = editMode,
                         selectedKeys = selectedKeys,
+                        restoreCardKey = activeRestoreKey,
+                        onFocusRestored = { restoreCardKey = null },
                         onToggleSelected = { historyKey ->
                             selectedKeys = if (historyKey in selectedKeys) {
                                 selectedKeys - historyKey
@@ -153,6 +174,7 @@ fun HistoryTvScreen(
                             }
                         },
                         onOpen = { item ->
+                            restoreCardKey = item.historyKey
                             navController.navigate(Screen.VideoDetail.createRoute(item.siteKey, item.videoId))
                         },
                         onEnterEditMode = { historyKey ->
@@ -284,16 +306,19 @@ private fun TvHistorySection(
     section: TvHistorySectionData,
     editMode: Boolean,
     selectedKeys: Set<String>,
+    restoreCardKey: String?,
+    onFocusRestored: () -> Unit,
     onToggleSelected: (String) -> Unit,
     onOpen: (WatchHistoryEntity) -> Unit,
     onEnterEditMode: (String) -> Unit
 ) {
-    var currentPage by remember(section.key, section.items) { mutableStateOf(0) }
+    var currentPage by rememberSaveable(section.key) { mutableStateOf(0) }
     val pages = remember(section.items) { section.items.chunked(TV_PAGE_SIZE) }
     val visibleItems = pages.getOrElse(currentPage) { emptyList() }
 
-    LaunchedEffect(pages.size) {
-        currentPage = currentPage.coerceIn(0, (pages.size - 1).coerceAtLeast(0))
+    LaunchedEffect(pages, restoreCardKey) {
+        val restorePage = pages.indexOfFirst { page -> page.any { it.historyKey == restoreCardKey } }
+        currentPage = if (restorePage >= 0) restorePage else currentPage.coerceIn(0, (pages.size - 1).coerceAtLeast(0))
     }
 
     Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
@@ -332,6 +357,7 @@ private fun TvHistorySection(
                             onOpen = { onOpen(item) },
                             onLongPress = { onEnterEditMode(item.historyKey) },
                             modifier = Modifier.weight(1f)
+                                .restoreTvFocus(item.historyKey == restoreCardKey, onFocusRestored)
                         )
                     }
                     repeat(TV_COLUMNS - rowItems.size) {

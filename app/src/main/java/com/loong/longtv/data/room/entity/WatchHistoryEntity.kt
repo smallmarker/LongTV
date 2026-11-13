@@ -1,6 +1,7 @@
 package com.loong.longtv.data.room.entity
 
 import androidx.room.Entity
+import androidx.room.ColumnInfo
 import androidx.room.PrimaryKey
 
 @Entity(tableName = "watch_history")
@@ -16,4 +17,5 @@ data class WatchHistoryEntity(
     val positionMs: Long,
     val durationMs: Long,
     val updateTime: Long = System.currentTimeMillis(),
+    @ColumnInfo(defaultValue = "-1") val episodeIndex: Int = -1,
 )

@@ -32,6 +32,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -47,6 +48,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.navigation.NavController
+import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.paging.LoadState
 import androidx.paging.PagingData
 import androidx.paging.compose.collectAsLazyPagingItems
@@ -65,6 +67,7 @@ import com.loong.longtv.ui.common.currentDeviceClass
 import com.loong.longtv.ui.shared.home.VideoCard
 import com.loong.longtv.ui.shared.widgets.AppButton
 import com.loong.longtv.ui.shared.widgets.TvSurface
+import com.loong.longtv.ui.shared.widgets.restoreTvFocus
 import com.loong.longtv.ui.theme.AppError
 import com.loong.longtv.ui.theme.AppSurface
 import com.loong.longtv.ui.theme.AppTextMuted
@@ -273,6 +276,19 @@ private fun PopularVideoGrid(
     val refreshState = pagingItems.loadState.refresh
     val appendState = pagingItems.loadState.append
     var focusedIndex by remember { mutableStateOf(-1) }
+    var restoreCardKey by rememberSaveable(selectedTab?.id, currentSite?.key) { mutableStateOf<String?>(null) }
+    var lastTabId by rememberSaveable { mutableStateOf(selectedTab?.id) }
+    val currentEntry by navController.currentBackStackEntryAsState()
+    val activeRestoreKey = restoreCardKey.takeIf {
+        isTv && when (currentEntry?.destination?.route) {
+            Screen.Popular.route, Screen.ChildEducation.route, Screen.ContentSection.route -> true
+            else -> false
+        }
+    }
+    val snapshot = pagingItems.itemSnapshotList
+    val restoreIndex = remember(activeRestoreKey, snapshot) {
+        if (activeRestoreKey == null) -1 else snapshot.indexOfFirst { it?.popularCardKey() == activeRestoreKey }
+    }
 
     LaunchedEffect(pagingItems.itemCount) {
         prefetchSmartImages(
@@ -283,7 +299,16 @@ private fun PopularVideoGrid(
     }
 
     LaunchedEffect(selectedTab?.id) {
-        if (pagingItems.itemCount > 0) gridState.animateScrollToItem(0)
+        if (lastTabId != selectedTab?.id) {
+            lastTabId = selectedTab?.id
+            gridState.scrollToItem(0)
+        }
+    }
+
+    LaunchedEffect(activeRestoreKey, restoreIndex) {
+        if (restoreIndex >= 0 && gridState.layoutInfo.visibleItemsInfo.none { it.index == restoreIndex }) {
+            gridState.scrollToItem(restoreIndex)
+        }
     }
 
     if (refreshState is LoadState.Loading && pagingItems.itemCount == 0) {
@@ -367,12 +392,16 @@ private fun PopularVideoGrid(
                 key = pagingItems.itemKey { video -> video.id.ifBlank { "${video.typeId}-${video.name}" } }
             ) { index ->
                 val video = pagingItems[index] ?: return@items
+                val cardKey = video.popularCardKey()
                 TvSurface(
-                    modifier = Modifier.onFocusChanged { focusState ->
-                        if (focusState.isFocused) focusedIndex = index
-                        onGridFocusChanged(focusState.isFocused)
-                    },
+                    modifier = Modifier
+                        .restoreTvFocus(index == restoreIndex && cardKey == activeRestoreKey) { restoreCardKey = null }
+                        .onFocusChanged { focusState ->
+                            if (focusState.isFocused) focusedIndex = index
+                            onGridFocusChanged(focusState.isFocused)
+                        },
                     onClick = {
+                        if (isTv) restoreCardKey = cardKey
                         if (currentSite?.api == DOUBAN_API) {
                             navController.navigate(Screen.SearchResult.createRoute(video.name))
                         } else {
@@ -402,6 +431,8 @@ private fun PopularVideoGrid(
         }
     }
 }
+
+private fun VodInfo.popularCardKey(): String = "$siteKey:${id.ifBlank { "${typeId}-$name" }}"
 
 private const val DOUBAN_API = "csp_Douban"
 

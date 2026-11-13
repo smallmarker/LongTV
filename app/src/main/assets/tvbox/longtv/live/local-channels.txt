@@ -1,0 +1,12 @@
+浙江,#genre#
+钱江频道,http://ali-m-l.cztv.com/channels/lantian/channel02/1080p.m3u8
+杭州余杭平安,http://l.cztvcloud.com/channels/lantian/SXyuhang2/720p.m3u8
+四川,#genre#
+泸州公共,http://m3u8.channel.luzhoubs.com/nmip-media/channellive/channel102221/playlist.m3u8
+泸州科教,http://file.luzhoubs.com/nmip-media/channellive/channel103074/playlist.m3u8
+金川新闻综合,http://live.jinchuanrmt.com:90/live/zhxw.m3u8
+黑水新闻综合,http://live.schstv.com:90/live/xwzh.m3u8
+云南,#genre#
+文山州新闻综合,http://m3u8.channel.wsrtv.com.cn/cms/videos/nmip-media/channellive/channel7/playlist.m3u8?zyund
+山西,#genre#
+定襄综合,http://lbyzztfe.live.sxmty.com/live/hls/645ff4c60e0a49f0a203abbd73dd8be9/0720e665f10f48e98c9639f4f492fb4a-1.m3u8?zshanxd

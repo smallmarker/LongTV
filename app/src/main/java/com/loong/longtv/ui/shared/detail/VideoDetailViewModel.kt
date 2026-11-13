@@ -2,9 +2,12 @@ package com.loong.longtv.ui.shared.detail
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.loong.longtv.data.EpisodeSkipPreference
+import com.loong.longtv.data.EpisodeSkipSettings
 import com.loong.longtv.data.favorite.FavoriteRepository
 import com.loong.longtv.data.history.WatchHistoryRepository
 import com.loong.longtv.data.room.entity.FavoriteEntity
+import com.loong.longtv.data.room.entity.EpisodeProgressEntity
 import com.loong.longtv.data.room.entity.WatchHistoryEntity
 import com.loong.longtv.engine.TvBoxEngine
 import com.loong.longtv.engine.player.PlayableMedia
@@ -28,9 +31,11 @@ data class VideoDetailUiState(
     val detail: VodInfo? = null,
     val selectedSourceIndex: Int = 0,
     val selectedEpisodeIndex: Int = 0,
+    val playbackSessionId: Int = 0,
     val playableMedia: PlayableMedia? = null,
     val resumePositionMs: Long = 0,
     val favorite: Boolean = false,
+    val episodeSkipSettings: EpisodeSkipSettings = EpisodeSkipSettings(),
 )
 
 private enum class PlayRequestMode {
@@ -38,18 +43,34 @@ private enum class PlayRequestMode {
     AutoFallback
 }
 
+private val episodeNumberPattern = Regex("""(?:第\s*|ep\.?\s*)?([0-9]+)\s*[集话話]?""", RegexOption.IGNORE_CASE)
+
+internal fun Episode.recoveryLabel(): String? {
+    val label = name.trim()
+    val number = episodeNumberPattern.matchEntire(label)?.groupValues?.get(1)?.toIntOrNull()
+    return number?.let { "#$it" }
+        ?: label.lowercase().takeIf { it.isNotBlank() && it != "播放" && it != "立即播放" }
+}
+
 @HiltViewModel
 class VideoDetailViewModel @Inject constructor(
     private val engine: TvBoxEngine,
     private val watchHistoryRepository: WatchHistoryRepository,
     private val favoriteRepository: FavoriteRepository,
+    private val episodeSkipPreference: EpisodeSkipPreference,
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(VideoDetailUiState(contentLoading = true))
     val uiState: StateFlow<VideoDetailUiState> = _uiState.asStateFlow()
     private var playRequestVersion = 0
+    private var detailRequestKey: Pair<String, String>? = null
 
-    fun loadDetail(siteKey: String, id: String) {
+    internal fun loadDetail(siteKey: String, id: String, searchResume: PlaybackSearchResume? = null) {
+        val requestKey = siteKey to id
+        val current = _uiState.value
+        if (detailRequestKey == requestKey && (current.contentLoading || current.detail != null)) return
+        detailRequestKey = requestKey
+        ++playRequestVersion
         val site = engine.currentConfig?.sites?.firstOrNull { it.key == siteKey }
         if (site == null) {
             _uiState.value = VideoDetailUiState(error = "站点不存在: $siteKey")
@@ -64,22 +85,40 @@ class VideoDetailViewModel @Inject constructor(
                     error = null,
                     siteKey = siteKey,
                     siteName = site.name,
-                    playableMedia = null
+                    playableMedia = null,
+                    detail = null
                 )
             }
 
             val result = engine.sourceRepository.getDetail(site, id)
+            if (detailRequestKey != requestKey) return@launch
             if (result.isSuccess) {
                 val detail = result.getOrThrow()
                 val history = watchHistoryRepository.find(siteKey, id)
+                val favorite = favoriteRepository.find(siteKey, id) != null
+                if (detailRequestKey != requestKey) return@launch
                 val lines = detail?.getPlayLines().orEmpty()
+                val resumeFromSearch = searchResume?.takeIf { detail != null && it.matches(detail) }
+                val resumeCandidates = resumeFromSearch?.let { hint ->
+                    lines.mapIndexedNotNull { index, line ->
+                        hint.episodeIndex(line)?.let { PlayCandidate(index, line, it) }
+                    }
+                }.orEmpty()
+                val resumeCandidate = resumeCandidates.firstOrNull()
                 val historySourceIndex = lines
                     .indexOfFirst { it.flag == history?.sourceName }
                     .takeIf { it >= 0 }
-                val selectedSourceIndex = historySourceIndex ?: lines.indexOfFirstPlayable().coerceAtLeast(0)
-                val selectedEpisodeIndex = lines.getOrNull(selectedSourceIndex)?.episodes
-                    ?.indexOfFirst { it.url == history?.episodeUrl }
-                    ?.takeIf { it >= 0 } ?: 0
+                val selectedSourceIndex = resumeCandidate?.sourceIndex ?: historySourceIndex
+                    ?: lines.indexOfFirstPlayable().coerceAtLeast(0)
+                val playLine = lines.getOrNull(selectedSourceIndex)
+                val selectedEpisodeIndex = resumeCandidate?.episodeIndex ?: if (playLine != null && history?.sourceName == playLine.flag) {
+                    history.episodeIndex.takeIf { playLine.episodes.getOrNull(it)?.name == history.episodeName }
+                        ?: playLine.episodes.indices.singleOrNull { playLine.episodes[it].name == history.episodeName }
+                        ?: playLine.episodes.indices.singleOrNull { playLine.episodes[it].url == history.episodeUrl }
+                        ?: 0
+                } else {
+                    0
+                }
 
                 _uiState.update {
                     it.copy(
@@ -88,14 +127,18 @@ class VideoDetailViewModel @Inject constructor(
                         selectedSourceIndex = selectedSourceIndex,
                         selectedEpisodeIndex = selectedEpisodeIndex,
                         playableMedia = null,
-                        resumePositionMs = history?.positionMs ?: 0,
-                        favorite = favoriteRepository.find(siteKey, id) != null,
+                        resumePositionMs = 0,
+                        favorite = favorite,
+                        episodeSkipSettings = episodeSkipPreference.load(siteKey, detail?.id ?: id),
                         error = null
                     )
                 }
-                val playLine = lines.getOrNull(selectedSourceIndex)
                 if (playLine != null && playLine.episodes.isNotEmpty()) {
-                    playEpisode(playLine, selectedEpisodeIndex, PlayRequestMode.AutoFallback)
+                    playEpisode(
+                        playLine, selectedEpisodeIndex, PlayRequestMode.AutoFallback,
+                        matchedCandidates = resumeCandidates.takeIf { it.isNotEmpty() },
+                        resumeOverrideMs = resumeFromSearch?.positionMs?.takeIf { resumeCandidate != null }
+                    )
                 }
             } else {
                 _uiState.update {
@@ -109,39 +152,22 @@ class VideoDetailViewModel @Inject constructor(
     }
 
     fun selectSource(index: Int) {
-        viewModelScope.launch {
-            val state = _uiState.value
-            val detail = state.detail ?: return@launch
-            val lines = detail.getPlayLines()
-            val history = watchHistoryRepository.find(state.siteKey, detail.id)
-            val source = lines.getOrNull(index) ?: return@launch
-            val episodeIndex = state.selectedEpisodeIndex
-                .takeIf { it in source.episodes.indices }
-                ?: source.episodes
-                    .indexOfFirst { it.url == history?.episodeUrl }
-                    .takeIf { it >= 0 }
-                ?: 0
-            val episode = source.episodes.getOrNull(episodeIndex)
-            val resumePosition = if (
-                episode != null &&
-                history?.sourceName == source.flag &&
-                history.episodeUrl == episode.url
-            ) {
-                history.positionMs
-            } else {
-                0
-            }
+        val state = _uiState.value
+        val source = state.detail?.getPlayLines()?.getOrNull(index) ?: return
+        val episodeIndex = state.selectedEpisodeIndex.takeIf { it in source.episodes.indices } ?: 0
+        if (source.episodes.isNotEmpty()) {
+            playEpisode(source, episodeIndex, PlayRequestMode.KeepSelected)
+        } else {
+            ++playRequestVersion
             _uiState.update {
                 it.copy(
                     selectedSourceIndex = index,
                     selectedEpisodeIndex = episodeIndex,
                     playableMedia = null,
-                    resumePositionMs = resumePosition,
+                    playerLoading = false,
+                    resumePositionMs = 0,
                     error = null
                 )
-            }
-            if (source.episodes.isNotEmpty()) {
-                playEpisode(source, episodeIndex, PlayRequestMode.KeepSelected)
             }
         }
     }
@@ -158,10 +184,72 @@ class VideoDetailViewModel @Inject constructor(
         playEpisode(playLine, episodeIndex, PlayRequestMode.KeepSelected)
     }
 
+    fun saveEpisodeSkipSettings(settings: EpisodeSkipSettings) {
+        val state = _uiState.value
+        val detail = state.detail ?: return
+        episodeSkipPreference.save(state.siteKey, detail.id, settings)
+        _uiState.update { it.copy(episodeSkipSettings = settings) }
+    }
+
+    fun recoverFullscreenPlayback(positionMs: Long, switchLine: Boolean) {
+        val state = _uiState.value
+        if (state.playerLoading) return
+        val detail = state.detail ?: return
+        val site = engine.currentConfig?.sites?.firstOrNull { it.key == state.siteKey } ?: return
+        val lines = detail.getPlayLines()
+        val source = lines.getOrNull(state.selectedSourceIndex) ?: return
+        val episode = source.episodes.getOrNull(state.selectedEpisodeIndex) ?: return
+        val episodeLabel = episode.recoveryLabel()
+        val candidates = if (switchLine) {
+            val alternateOffsets = if (source.uniqueEpisodeIndex(episodeLabel) == state.selectedEpisodeIndex) {
+                1 until lines.size
+            } else {
+                IntRange.EMPTY
+            }
+            alternateOffsets.mapNotNull { offset ->
+                val sourceIndex = (state.selectedSourceIndex + offset) % lines.size
+                val line = lines[sourceIndex]
+                val episodeIndex = line.uniqueEpisodeIndex(episodeLabel) ?: return@mapNotNull null
+                PlayCandidate(sourceIndex, line, episodeIndex)
+            }
+        } else {
+            listOf(PlayCandidate(state.selectedSourceIndex, source, state.selectedEpisodeIndex))
+        }
+
+        val resumePosition = positionMs.coerceAtLeast(0)
+        val requestVersion = ++playRequestVersion
+        _uiState.update {
+            it.copy(
+                playerLoading = candidates.isNotEmpty(),
+                playableMedia = null,
+                resumePositionMs = resumePosition,
+                playbackSessionId = requestVersion,
+                error = if (candidates.isEmpty()) "其他线路没有找到同一集，可以搜同名试试" else null
+            )
+        }
+        if (candidates.isEmpty()) return
+
+        viewModelScope.launch {
+            val attempt = resolvePlayableCandidate(site, candidates, PlayRequestMode.AutoFallback)
+            if (requestVersion != playRequestVersion) return@launch
+            val candidate = attempt.readyCandidate
+            val media = attempt.readyMedia
+            if (candidate != null && media != null) {
+                applyPlayableCandidate(state.siteKey, detail.id, candidate, media, requestVersion, resumePosition)
+            } else {
+                _uiState.update {
+                    it.copy(playerLoading = false, error = if (switchLine) "其他线路暂时无法播放" else "当前线路重试失败")
+                }
+            }
+        }
+    }
+
     private fun playEpisode(
         playLine: PlayLine,
         episodeIndex: Int,
-        mode: PlayRequestMode
+        mode: PlayRequestMode,
+        matchedCandidates: List<PlayCandidate>? = null,
+        resumeOverrideMs: Long? = null
     ) {
         val state = _uiState.value
         val site = engine.currentConfig?.sites?.firstOrNull { it.key == state.siteKey } ?: return
@@ -169,23 +257,23 @@ class VideoDetailViewModel @Inject constructor(
         val lines = detail.getPlayLines()
         val requestedSourceIndex = lines.indexOfFirst { it.flag == playLine.flag }
             .takeIf { it >= 0 } ?: state.selectedSourceIndex
-        val episode = playLine.episodes.getOrNull(episodeIndex) ?: return
+        if (episodeIndex !in playLine.episodes.indices) return
         val requestVersion = ++playRequestVersion
 
-        viewModelScope.launch {
-            val requestedResumePosition = resolveResumePosition(playLine, episode)
-            _uiState.update {
-                it.copy(
-                    playerLoading = true,
-                    selectedSourceIndex = requestedSourceIndex,
-                    selectedEpisodeIndex = episodeIndex,
-                    playableMedia = null,
-                    resumePositionMs = requestedResumePosition,
-                    error = null
-                )
-            }
+        _uiState.update {
+            it.copy(
+                playerLoading = true,
+                selectedSourceIndex = requestedSourceIndex,
+                selectedEpisodeIndex = episodeIndex,
+                playbackSessionId = requestVersion,
+                playableMedia = null,
+                resumePositionMs = 0,
+                error = null
+            )
+        }
 
-            val candidates = if (mode.usesFallbackCandidates()) {
+        viewModelScope.launch {
+            val candidates = matchedCandidates ?: if (mode.usesFallbackCandidates()) {
                 lines.playCandidates(requestedSourceIndex, episodeIndex)
             } else {
                 listOf(PlayCandidate(requestedSourceIndex, playLine, episodeIndex))
@@ -197,14 +285,14 @@ class VideoDetailViewModel @Inject constructor(
             val readyCandidate = finalAttempt.readyCandidate
             val readyMedia = finalAttempt.readyMedia
             if (readyCandidate != null && readyMedia != null) {
-                applyPlayableCandidate(readyCandidate, readyMedia)
+                applyPlayableCandidate(state.siteKey, detail.id, readyCandidate, readyMedia, requestVersion, resumeOverrideMs)
                 return@launch
             }
 
             val resolvedCandidate = finalAttempt.firstResolvedCandidate
             val resolvedMedia = finalAttempt.firstResolvedMedia
             if (resolvedCandidate != null && resolvedMedia != null) {
-                applyPlayableCandidate(resolvedCandidate, resolvedMedia)
+                applyPlayableCandidate(state.siteKey, detail.id, resolvedCandidate, resolvedMedia, requestVersion, resumeOverrideMs)
                 return@launch
             }
 
@@ -220,71 +308,54 @@ class VideoDetailViewModel @Inject constructor(
         }
     }
 
-    fun saveProgress(positionMs: Long, durationMs: Long, updateResumeState: Boolean = false) {
-        val state = _uiState.value
-        if (state.playerLoading || state.playableMedia == null) return
+    internal fun saveProgress(
+        state: VideoDetailUiState,
+        playLine: PlayLine?,
+        positionMs: Long,
+        durationMs: Long
+    ) {
+        if (state.playableMedia == null || playLine == null || durationMs <= 0 || positionMs < 0) return
         val detail = state.detail ?: return
-        val lines = detail.getPlayLines()
-        val playLine = lines.getOrNull(state.selectedSourceIndex) ?: return
         val episode = playLine.episodes.getOrNull(state.selectedEpisodeIndex) ?: return
+        val active = _uiState.value
+        val updateRecent = active.siteKey == state.siteKey && active.detail?.id == detail.id &&
+            active.selectedSourceIndex == state.selectedSourceIndex &&
+            active.selectedEpisodeIndex == state.selectedEpisodeIndex &&
+            active.playbackSessionId == state.playbackSessionId
+        val recent = WatchHistoryEntity(
+            historyKey = "${state.siteKey}_${detail.id}",
+            siteKey = state.siteKey,
+            videoId = detail.id,
+            title = detail.name,
+            cover = detail.pic,
+            sourceName = playLine.flag,
+            episodeName = episode.name,
+            episodeUrl = episode.url,
+            positionMs = positionMs.coerceAtMost(durationMs),
+            durationMs = durationMs,
+            episodeIndex = state.selectedEpisodeIndex
+        )
         viewModelScope.launch {
-            watchHistoryRepository.save(
-                WatchHistoryEntity(
-                    historyKey = "${state.siteKey}_${detail.id}",
-                    siteKey = state.siteKey,
-                    videoId = detail.id,
-                    title = detail.name,
-                    cover = detail.pic,
+            watchHistoryRepository.saveProgress(
+                EpisodeProgressEntity(
+                    siteKey = recent.siteKey,
+                    videoId = recent.videoId,
                     sourceName = playLine.flag,
+                    episodeIndex = state.selectedEpisodeIndex,
                     episodeName = episode.name,
                     episodeUrl = episode.url,
-                    positionMs = positionMs,
+                    positionMs = recent.positionMs,
                     durationMs = durationMs,
-                )
+                    updateTime = recent.updateTime
+                ),
+                recent.takeIf { updateRecent }
             )
-            if (updateResumeState) {
-                _uiState.update { it.copy(resumePositionMs = positionMs) }
-            }
         }
     }
 
     fun applyFullscreenProgress(positionMs: Long) {
         if (positionMs < 0) return
-        saveProgress(positionMs, 0, updateResumeState = true)
-    }
-
-    fun applyFullscreenProgress(playLine: PlayLine, episodeIndex: Int, positionMs: Long) {
-        if (positionMs < 0) return
-        val state = _uiState.value
-        val detail = state.detail ?: return
-        val lines = detail.getPlayLines()
-        val sourceIndex = lines.indexOfFirst { it.flag == playLine.flag }
-            .takeIf { it >= 0 } ?: state.selectedSourceIndex
-        val episode = playLine.episodes.getOrNull(episodeIndex) ?: return
-
-        viewModelScope.launch {
-            watchHistoryRepository.save(
-                WatchHistoryEntity(
-                    historyKey = "${state.siteKey}_${detail.id}",
-                    siteKey = state.siteKey,
-                    videoId = detail.id,
-                    title = detail.name,
-                    cover = detail.pic,
-                    sourceName = playLine.flag,
-                    episodeName = episode.name,
-                    episodeUrl = episode.url,
-                    positionMs = positionMs,
-                    durationMs = 0,
-                )
-            )
-            _uiState.update {
-                it.copy(
-                    selectedSourceIndex = sourceIndex,
-                    selectedEpisodeIndex = episodeIndex,
-                    resumePositionMs = positionMs
-                )
-            }
-        }
+        _uiState.update { if (it.playableMedia == null) it else it.copy(resumePositionMs = positionMs) }
     }
 
     fun toggleFavorite() {
@@ -312,16 +383,6 @@ class VideoDetailViewModel @Inject constructor(
 
     fun clearError() {
         _uiState.update { it.copy(error = null) }
-    }
-
-    private suspend fun resolveResumePosition(playLine: PlayLine, episode: Episode): Long {
-        val state = _uiState.value
-        val history = watchHistoryRepository.find(state.siteKey, state.detail?.id.orEmpty())
-        return if (history?.sourceName == playLine.flag && history.episodeUrl == episode.url) {
-            history.positionMs
-        } else {
-            0
-        }
     }
 
     private data class PlayCandidate(
@@ -389,17 +450,29 @@ class VideoDetailViewModel @Inject constructor(
     }
 
     private suspend fun applyPlayableCandidate(
+        siteKey: String,
+        videoId: String,
         candidate: PlayCandidate,
-        playableMedia: PlayableMedia
+        playableMedia: PlayableMedia,
+        requestVersion: Int,
+        resumeOverrideMs: Long? = null
     ) {
-        val episode = candidate.playLine.episodes.getOrNull(candidate.episodeIndex)
+        val episodes = candidate.playLine.episodes
+        val episode = episodes[candidate.episodeIndex]
+        val progress = if (resumeOverrideMs != null) null else watchHistoryRepository.findEpisode(
+            siteKey, videoId, candidate.playLine.flag, candidate.episodeIndex, episode.name, episode.url,
+            matchByName = episode.name.isNotBlank() && episodes.count { it.name == episode.name } == 1,
+            matchByUrl = episode.url.isNotBlank() && episodes.count { it.url == episode.url } == 1
+        )
+        if (requestVersion != playRequestVersion) return
         _uiState.update {
             it.copy(
                 playerLoading = false,
                 selectedSourceIndex = candidate.sourceIndex,
                 selectedEpisodeIndex = candidate.episodeIndex,
                 playableMedia = playableMedia,
-                resumePositionMs = if (episode != null) resolveResumePosition(candidate.playLine, episode) else 0L,
+                resumePositionMs = resumeOverrideMs ?: progress?.positionMs
+                    ?.takeUnless { progress.durationMs > 0 && it >= progress.durationMs } ?: 0L,
                 error = null
             )
         }

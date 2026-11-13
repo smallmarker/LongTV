@@ -21,7 +21,7 @@ class TvBoxEngine(context: Context) {
     val spiderManager = SpiderManager(context)
     val sourceRepository = SourceRepository(spiderManager)
     val playerResolver = PlayerResolver()
-    val liveSpider = LiveSpider()
+    val liveSpider = LiveSpider(context)
 
     /** 当前活跃配置 */
     val currentConfig: TvBoxConfig? get() = configManager.currentConfig

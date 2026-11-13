@@ -1,5 +1,8 @@
 package com.loong.longtv.ui.tv.favorite
 
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.navigation.compose.currentBackStackEntryAsState
+import com.loong.longtv.ui.shared.widgets.restoreTvFocus
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -93,9 +96,12 @@ fun FavoriteTvScreen(
     val favorites by viewModel.favorites.collectAsStateWithLifecycle()
     val detailMap by detailViewModel.detailMap.collectAsState()
     var editMode by remember { mutableStateOf(false) }
-    var selectedTab by remember { mutableStateOf(TvFavoriteCategory.All) }
+    var selectedTab by rememberSaveable { mutableStateOf(TvFavoriteCategory.All) }
     var selectedKeys by remember { mutableStateOf(setOf<String>()) }
-    var sortByTime by remember { mutableStateOf(TvFavoriteSortOption.Latest) }
+    var sortByTime by rememberSaveable { mutableStateOf(TvFavoriteSortOption.Latest) }
+    val currentEntry by navController.currentBackStackEntryAsState()
+    var restoreCardKey by rememberSaveable { mutableStateOf<String?>(null) }
+    val activeRestoreKey = restoreCardKey.takeIf { !editMode && currentEntry?.destination?.route == Screen.Favorite.route }
     var requestBatchFocus by remember { mutableStateOf(false) }
     val batchPrimaryFocusRequester = remember { FocusRequester() }
 
@@ -189,10 +195,13 @@ fun FavoriteTvScreen(
                 detailMap = detailMap,
                 editMode = editMode,
                 selectedKeys = selectedKeys,
+                restoreCardKey = activeRestoreKey,
+                onFocusRestored = { restoreCardKey = null },
                 onToggleSelected = { key ->
                     selectedKeys = if (key in selectedKeys) selectedKeys - key else selectedKeys + key
                 },
                 onOpen = { item ->
+                    restoreCardKey = item.favoriteKey
                     navController.navigate(Screen.VideoDetail.createRoute(item.siteKey, item.videoId))
                 },
                 onEnterEditMode = { key ->
@@ -385,6 +394,8 @@ private fun FavoriteTvGridSection(
     detailMap: Map<String, FavoriteTvCardMeta>,
     editMode: Boolean,
     selectedKeys: Set<String>,
+    restoreCardKey: String?,
+    onFocusRestored: () -> Unit,
     onToggleSelected: (String) -> Unit,
     onOpen: (FavoriteEntity) -> Unit,
     onEnterEditMode: (String) -> Unit,
@@ -394,8 +405,9 @@ private fun FavoriteTvGridSection(
     val pages = remember(favorites) { favorites.chunked(TV_FAVORITE_PAGE_SIZE) }
     val visibleItems = pages.getOrElse(currentPage) { emptyList() }
 
-    LaunchedEffect(pages.size) {
-        currentPage = currentPage.coerceIn(0, (pages.size - 1).coerceAtLeast(0))
+    LaunchedEffect(pages, restoreCardKey) {
+        val restorePage = pages.indexOfFirst { page -> page.any { it.favoriteKey == restoreCardKey } }
+        currentPage = if (restorePage >= 0) restorePage else currentPage.coerceIn(0, (pages.size - 1).coerceAtLeast(0))
     }
 
     LaunchedEffect(visibleItems) {
@@ -416,6 +428,7 @@ private fun FavoriteTvGridSection(
                             onOpen = { onOpen(item) },
                             onLongPress = { onEnterEditMode(item.favoriteKey) },
                             modifier = Modifier.weight(1f)
+                                .restoreTvFocus(item.favoriteKey == restoreCardKey, onFocusRestored)
                         )
                     }
                     repeat(TV_FAVORITE_COLUMNS - rowItems.size) {
